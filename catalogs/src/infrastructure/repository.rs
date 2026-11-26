@@ -67,16 +67,18 @@ fn sql(query: &IdQuery) -> String {
     } else {
         String::new()
     };
-    let sort = if query.kind == ContentType::Movie { "sum(torrents.seeders)" } else { "max(torrents.seeders)" };
+    let (distinct, sort) = if query.kind == ContentType::Movie { ("DISTINCT ", "sum") } else { ("", "max") };
     format!(
-        r#"SELECT files."{id}"::text
-        FROM (SELECT torrents."infoHash", torrents.seeders FROM torrents
-                WHERE seeders > 0 AND type = $1 AND provider = ANY($2) {date} {title}
-              ) AS torrents
-        JOIN files ON torrents."infoHash" = files."infoHash"
-        WHERE files."{id}" IS NOT NULL {episode}
-        GROUP BY files."{id}"
-        ORDER BY {sort} DESC
+        r#"SELECT id::text
+        FROM (SELECT {distinct}files."{id}" AS id, torrents."infoHash", torrents.seeders
+              FROM (SELECT torrents."infoHash", torrents.seeders FROM torrents
+                      WHERE seeders > 0 AND type = $1 AND provider = ANY($2) {date} {title}
+                    ) AS torrents
+              JOIN files ON torrents."infoHash" = files."infoHash"
+              WHERE files."{id}" IS NOT NULL {episode}
+             ) AS per_torrent
+        GROUP BY id
+        ORDER BY {sort}(seeders) DESC
         LIMIT {ID_LIMIT}"#
     )
 }
@@ -114,11 +116,12 @@ mod tests {
     #[test]
     fn movies_exclude_foreign_and_season_titles_and_sum_seeders() {
         let sql = sql(&query(ContentType::Movie, true));
-        assert!(sql.contains(r#"files."imdbId"::text"#));
+        assert!(sql.contains(r#"files."imdbId" AS id"#));
+        assert!(sql.contains(r#"SELECT DISTINCT files."imdbId" AS id, torrents."infoHash""#));
         assert!(sql.contains(r#"files."imdbSeason" IS NULL AND files."imdbEpisode" IS NULL"#));
         assert!(sql.contains(r#""uploadDate" BETWEEN $3 AND $4"#));
         assert!(sql.contains("NOT LIKE '%[Erotic]%'"));
-        assert!(sql.contains("ORDER BY sum(torrents.seeders) DESC"));
+        assert!(sql.contains("ORDER BY sum(seeders) DESC"));
         assert!(sql.ends_with("LIMIT 5000"));
     }
 
@@ -128,13 +131,14 @@ mod tests {
         assert!(sql.contains(r#"files."imdbSeason" IS NOT NULL AND files."imdbEpisode" IS NOT NULL"#));
         assert!(!sql.contains("BETWEEN"));
         assert!(!sql.contains("Erotic"));
-        assert!(sql.contains("ORDER BY max(torrents.seeders) DESC"));
+        assert!(sql.contains("ORDER BY max(seeders) DESC"));
+        assert!(!sql.contains("DISTINCT"));
     }
 
     #[test]
     fn anime_groups_by_kitsu_id_without_episode_conditions() {
         let sql = sql(&query(ContentType::Anime, true));
-        assert!(sql.contains(r#"GROUP BY files."kitsuId""#));
+        assert!(sql.contains(r#"SELECT files."kitsuId" AS id, torrents."infoHash""#));
         assert!(!sql.contains("imdbSeason"));
     }
 }
