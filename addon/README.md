@@ -112,8 +112,8 @@ psql "$STAGING_DATABASE_URI" \
 ```
 
 Review actual versus estimated rows, scan types, sort method, shared buffer hits/reads,
-and execution time for each plan. Capture the existing indexes (`\\d+ files` and
-`\\d+ torrents`) alongside the plans. Do not apply index changes based on query
-shape alone: validate candidate indexes against these plans and write throughput on
-the same staging dataset. The script runs `EXPLAIN ANALYZE` SELECT statements and
+and execution time for each plan. The script also reports existing index definitions,
+table sizes and row estimates, planner column statistics, and cumulative index usage;
+keep this output with the plans. Do not apply index changes based on query shape alone:
+validate candidate indexes against these plans and write throughput on the same staging dataset. The script runs `EXPLAIN ANALYZE` SELECT statements and
 must not be run on a latency-sensitive production database.
