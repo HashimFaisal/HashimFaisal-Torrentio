@@ -8,7 +8,7 @@
     "name": "Torrentio Local",
     "description": "Movie and TV torrent results via The RarBg public API; playback uses Nuvio P2P.",
     "version": "0.1.0",
-    "filename": "nuvio-plugin/torrentio.js",
+    "filename": "torrentio.js",
     "supportedTypes": ["movie", "tv"],
     "enabled": true,
     "contentLanguage": ["en", "ar"],
