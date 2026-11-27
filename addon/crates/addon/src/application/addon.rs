@@ -1,6 +1,6 @@
+use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::Arc;
-use serde::Serialize;
 
 use crate::{
     application::error::HandlerError,
@@ -213,18 +213,18 @@ impl Addon {
 
 fn contains_imdb_id(value: &str) -> bool {
     let bytes = value.as_bytes();
-    bytes.windows(2).enumerate().any(|(index, pair)| {
-        pair.eq_ignore_ascii_case(b"tt")
-            && bytes.get(index + 2).is_some_and(u8::is_ascii_digit)
-    })
+    bytes
+        .windows(2)
+        .enumerate()
+        .any(|(index, pair)| pair.eq_ignore_ascii_case(b"tt") && bytes.get(index + 2).is_some_and(u8::is_ascii_digit))
 }
 
 fn contains_kitsu_id(value: &str) -> bool {
     let bytes = value.as_bytes();
-    bytes.windows(6).enumerate().any(|(index, prefix)| {
-        prefix.eq_ignore_ascii_case(b"kitsu:")
-            && bytes.get(index + 6).is_some_and(u8::is_ascii_digit)
-    })
+    bytes
+        .windows(6)
+        .enumerate()
+        .any(|(index, prefix)| prefix.eq_ignore_ascii_case(b"kitsu:") && bytes.get(index + 6).is_some_and(u8::is_ascii_digit))
 }
 
 fn is_digits(value: &str) -> bool {
@@ -247,19 +247,19 @@ fn is_imdb_movie(value: &str) -> bool {
 }
 
 fn is_kitsu_id(value: &str) -> bool {
-    let Some((prefix, suffix)) = value.split_at_checked(6) else {
+    let Some(suffix) = value.get(..6).filter(|prefix| prefix.eq_ignore_ascii_case("kitsu:")) else {
         return false;
     };
-    if !prefix.eq_ignore_ascii_case("kitsu:") {
+    let Some(rest) = value.get(suffix.len()..) else {
         return false;
-    }
-    let mut parts = suffix.split(':');
+    };
+    let mut parts = rest.split(':');
     matches!(
         (parts.next(), parts.next(), parts.next()),
         (Some(id), None, None) if is_digits(id)
     ) || matches!(
-        (suffix.split(':').next(), suffix.split(':').nth(1), suffix.split(':').nth(2)),
-        (Some(id), Some(episode), None) if is_digits(id) && is_digits(episode)
+        (rest.split_once(':').map(|(id, episode)| (id, episode)),),
+        (Some((id, episode)),) if is_digits(id) && is_digits(episode) && !episode.contains(':')
     )
 }
 
