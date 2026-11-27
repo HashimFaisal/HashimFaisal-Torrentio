@@ -1,14 +1,14 @@
 {
   "name": "Torrentio Local",
-  "version": "0.2.1",
-  "description": "Torrent discovery with Hex/Base32 BTIH compatibility, duplicate consolidation, metadata confidence, swarm-health ranking, and resilient API retries.",
+  "version": "0.3.0",
+  "description": "Multi-source torrent discovery with parallel The RarBg, YTS and EZTV search, cross-provider deduplication, swarm-aware ranking, metadata confidence, and resilient provider isolation.",
   "author": "HashimFaisal",
   "scrapers": [
     {
       "id": "torrentio-local",
       "name": "Torrentio Local",
-      "description": "Swarm-aware movie and TV torrent discovery with Hex/Base32 BTIH normalization, duplicate consolidation, conservative resolution validation, and resilient API retries. Nuvio handles P2P playback.",
-      "version": "0.2.1",
+      "description": "Parallel multi-catalog movie and TV torrent discovery with provider fallback, cross-source deduplication, swarm-aware ranking, and metadata validation. Nuvio handles P2P playback.",
+      "version": "0.3.0",
       "filename": "torrentio.js",
       "supportedTypes": [
         "movie",
