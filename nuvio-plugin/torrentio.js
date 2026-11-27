@@ -310,7 +310,7 @@ function rejectedVerification(value) {
 }
 // Idempotent GET recovery for temporary upstream/network failures.
 // Bounded retries prevent request storms and permanent 4xx responses fail fast.
-var REQUEST_MAX_ATTEMPTS = 3;
+var REQUEST_MAX_ATTEMPTS = 2;
 function waitMs(ms) {
   return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
@@ -320,9 +320,9 @@ function retryDelay(response, attempt) {
     var raw = response && response.headers && response.headers.get("Retry-After");
     if (raw && /^\d+(?:\.\d+)?$/.test(raw)) retryAfter = Number(raw) * 1000;
   } catch (_) {}
-  return Math.min(2000, Math.max(250 * Math.pow(2, attempt), retryAfter));
+  return Math.min(600, Math.max(150 * Math.pow(2, attempt), retryAfter));
 }
-var REQUEST_TIMEOUT_MS = 8000;
+var REQUEST_TIMEOUT_MS = 3500;
 async function fetchWithTimeout(url, service) {
   var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   var timer;
@@ -575,45 +575,35 @@ function retryableLookupError(error) {
     /timeout|timed out|network|fetch failed|socket|dns/i.test(message);
 }
 async function queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, profile) {
-  // Use the high-quality tier first. A sparse or transiently failed primary
-  // lookup unlocks two concurrent fallback tiers; one failed tier must not
-  // discard useful results returned by the other.
-  var batches = [], primaryError = null;
-  try {
-    var primary = await queryIndex(imdbId, kind, season, episode, 10);
-    batches.push(toStreams(primary, kind, season, episode, diagnostics, profile));
-  } catch (error) {
-    primaryError = error;
-    if (!retryableLookupError(error)) throw error;
-    recordDiagnostic(diagnostics, "primary-index-temporarily-unavailable");
-  }
-  if (!batches.length || batches[0].length < 5) {
-    var fallbackResults = await Promise.all([
-      queryIndex(imdbId, kind, season, episode, 5).then(
-        function(rows) { return { ok: true, rows: rows }; },
-        function(error) { return { ok: false, error: error }; }),
-      queryIndex(imdbId, kind, season, episode, 1).then(
-        function(rows) { return { ok: true, rows: rows }; },
-        function(error) { return { ok: false, error: error }; })
-    ]);
-    for (var f = 0; f < fallbackResults.length; f++) {
-      if (fallbackResults[f].ok) {
-        batches.push(toStreams(fallbackResults[f].rows, kind, season, episode, diagnostics, profile));
-      } else {
-        recordDiagnostic(diagnostics, "fallback-index-tier-failed");
-      }
-    }
-    if (primaryError && !fallbackResults.some(function(result) { return result.ok; })) {
-      throw primaryError;
+  // Launch all seed thresholds together: never make fallback discovery wait
+  // for the slowest primary tier. Results are merged as soon as all bounded
+  // requests settle; independent providers continue in parallel as before.
+  var thresholds = [10, 5, 1];
+  var results = await Promise.all(thresholds.map(function(threshold) {
+    return queryIndex(imdbId, kind, season, episode, threshold).then(
+      function(rows) { return { ok: true, rows: rows, threshold: threshold }; },
+      function(error) { return { ok: false, error: error, threshold: threshold }; }
+    );
+  }));
+  var batches = [], successfulTiers = 0, firstError = null;
+  for (var i = 0; i < results.length; i++) {
+    var result = results[i];
+    if (result.ok) {
+      successfulTiers++;
+      batches.push(toStreams(result.rows, kind, season, episode, diagnostics, profile));
+    } else {
+      if (!firstError) firstError = result.error;
+      recordDiagnostic(diagnostics, result.threshold === 10
+        ? "primary-index-tier-failed" : "fallback-index-tier-failed");
     }
   }
+  if (!successfulTiers && firstError) throw firstError;
   var collected = [], seen = Object.create(null);
-  for (var i = 0; i < batches.length; i++) {
-    var batch = batches[i];
-    for (var j = 0; j < batch.length; j++) {
-      var hash = batch[j].infoHash;
-      if (seen[hash] !== undefined) collected[seen[hash]] = mergeSameHash(collected[seen[hash]], batch[j]);
-      else { seen[hash] = collected.length; collected.push(batch[j]); }
+  for (var b = 0; b < batches.length; b++) {
+    for (var j = 0; j < batches[b].length; j++) {
+      var stream = batches[b][j], hash = stream.infoHash;
+      if (seen[hash] !== undefined) collected[seen[hash]] = mergeSameHash(collected[seen[hash]], stream);
+      else { seen[hash] = collected.length; collected.push(stream); }
     }
   }
   collected.sort(function(a,b) {
