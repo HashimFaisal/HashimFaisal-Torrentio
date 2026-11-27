@@ -30,7 +30,7 @@ INSERT INTO "torrents" (
     "uploadDate", "seeders", "trackers", "languages", "resolution"
 ) VALUES (
     '0123456789abcdef0123456789abcdef01234567',
-    'RuntimeSmokeFixture',
+    'YTS',
     'runtime-smoke-1',
     'Runtime Smoke Test 2024 1080p WEB-DL x264',
     1500000000,
