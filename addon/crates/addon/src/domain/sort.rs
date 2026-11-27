@@ -1,6 +1,4 @@
-use std::{cmp::Ordering, collections::HashMap, sync::LazyLock};
-
-use regex::Regex;
+use std::{cmp::Ordering, collections::HashMap};
 
 use crate::{
     domain::config::Config,
@@ -60,11 +58,6 @@ pub const SORT_OPTIONS: &[SortOption] = &[
     SortOption { key: "seeders", description: "By seeders" },
     SortOption { key: "size", description: "By size" },
 ];
-
-static RESOLUTION: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[0-9]+p").expect("valid regex"));
-static HDR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"HDR|DV").expect("valid regex"));
-static EIGHT_K: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)8k").expect("valid regex"));
-static FOUR_K: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)4k|uhd").expect("valid regex"));
 
 pub fn sort_streams(streams: Vec<Stream>, config: &Config) -> Vec<Stream> {
     let preferences = config.preferences();
@@ -165,29 +158,58 @@ fn compare_utf16(a: &str, b: &str) -> Ordering {
 }
 
 fn extract_quality(name: &str) -> String {
-    let description = name.split('\n').nth(1);
-    let with_hdr_score = |resolution: &str| {
-        if description.is_some_and(|text| HDR.is_match(text)) {
-            resolution.replace("0p", "1p")
-        } else {
-            resolution.to_owned()
-        }
-    };
-    let Some(description) = description else {
+    let Some(description) = name.split('\n').nth(1) else {
         return "undefined".to_owned();
     };
-    if let Some(found) = RESOLUTION.find(description) {
-        with_hdr_score(found.as_str())
-    } else if EIGHT_K.is_match(description) {
-        with_hdr_score("4320p")
-    } else if FOUR_K.is_match(description) {
-        with_hdr_score("2060p")
+    let has_hdr = description.contains("HDR") || description.contains("DV");
+    if let Some(found) = find_resolution(description) {
+        with_hdr_score(found, has_hdr)
+    } else if contains_ascii_case_insensitive(description, b"8k") {
+        with_hdr_score("4320p", has_hdr)
+    } else if contains_ascii_case_insensitive(description, b"4k")
+        || contains_ascii_case_insensitive(description, b"uhd")
+    {
+        with_hdr_score("2060p", has_hdr)
     } else if Quality::Cam.matches(Some(description), None) {
         Quality::Cam.label().to_owned()
     } else if Quality::Other.matches(Some(description), None) {
         Quality::Other.label().to_owned()
     } else {
         description.to_owned()
+    }
+}
+
+fn find_resolution(description: &str) -> Option<&str> {
+    let bytes = description.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if !bytes[index].is_ascii_digit() {
+            index += 1;
+            continue;
+        }
+        let start = index;
+        while index < bytes.len() && bytes[index].is_ascii_digit() {
+            index += 1;
+        }
+        if index < bytes.len() && bytes[index] == b'p' {
+            return description.get(start..=index);
+        }
+    }
+    None
+}
+
+fn contains_ascii_case_insensitive(value: &str, needle: &[u8]) -> bool {
+    value.as_bytes().windows(needle.len()).any(|window| window.eq_ignore_ascii_case(needle))
+}
+
+fn with_hdr_score(resolution: &str, has_hdr: bool) -> String {
+    if has_hdr && resolution.ends_with("0p") {
+        let mut scored = resolution.to_owned();
+        let zero_index = scored.len() - 2;
+        scored.replace_range(zero_index..zero_index + 1, "1");
+        scored
+    } else {
+        resolution.to_owned()
     }
 }
 
