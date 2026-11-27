@@ -34,7 +34,7 @@ async function imdbFor(tmdbId, mediaType) {
 async function queryIndex(imdbId, kind, season, episode) {
   var params = "imdb=" + encodeURIComponent(imdbId) +
     "&category=" + (kind === "movie" ? "movies" : "tv") +
-    "&limit=50&clean=1&sort=quality";
+    "&limit=50&clean=1&min_seeders=5&sort=seeders";
   if (kind !== "movie") params += "&season=" + encodeURIComponent(season) +
     "&episode=" + encodeURIComponent(episode);
   var res = await fetch(INDEX_BASE + "/search/?" + params, {
