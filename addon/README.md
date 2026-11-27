@@ -96,3 +96,24 @@ With Redis in the loop the hot path is bounded by Redis itself for both implemen
 
 In production a Node process sat at 0.8-1.7 GB. The Rust process starts around 0.25 GB and grows with the stream cache, which
 holds zstd-compressed JSON (about 5.5 KB per entry, an 800 MB budget by default).
+
+## PostgreSQL query plans
+
+Before changing indexes, collect plans from a staging database or a disposable clone
+with representative common and rare IMDb/Kitsu IDs. The diagnostic script mirrors the
+addon lookup queries and includes the torrent point lookup and batched file lookup:
+
+```sh
+psql "$STAGING_DATABASE_URI" \
+  -v imdb_id='tt0111161' -v season=1 -v episode=1 \
+  -v kitsu_id=1 -v kitsu_episode=1 \
+  -v info_hash_1='...' -v info_hash_2='...' \
+  -f addon/bench/postgres-explain.sql
+```
+
+Review actual versus estimated rows, scan types, sort method, shared buffer hits/reads,
+and execution time for each plan. Capture the existing indexes (`\\d+ files` and
+`\\d+ torrents`) alongside the plans. Do not apply index changes based on query
+shape alone: validate candidate indexes against these plans and write throughput on
+the same staging dataset. The script runs `EXPLAIN ANALYZE` SELECT statements and
+must not be run on a latency-sensitive production database.
