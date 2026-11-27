@@ -9,6 +9,7 @@ on:
       - "addon/**"
       - ".github/workflows/direct-streaming-checks.yml"
       - ".github/workflows/manual-benchmark.yml"
+      - ".github/workflows/self-benchmark.yml"
   pull_request:
     branches:
       - direct-streaming
