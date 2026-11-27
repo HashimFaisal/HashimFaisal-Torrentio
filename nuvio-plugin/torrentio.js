@@ -207,7 +207,7 @@ function toStreams(items, kind, season, episode) {
     var magnet = str(item.magnet);
     var magnetMatch = magnet.match(/(?:^|[?&])xt=urn:btih:([a-f0-9]{40})(?:&|$)/i);
     var seeds = Number(item.seeders);
-    var leechers = Number(item.leechers);
+    var leechers = item.leechers === undefined || item.leechers === null || item.leechers === "" ? 0 : Number(item.leechers);
     var bytes = Number(item.size);
     if (!validHash(hash) || !magnetMatch ||
         magnetMatch[1].toLowerCase() !== hash ||
