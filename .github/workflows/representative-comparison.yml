@@ -1,0 +1,153 @@
+name: Torrent Engine Representative Comparison
+
+on:
+  push:
+    branches:
+      - direct-streaming
+    paths:
+      - ".github/workflows/representative-comparison.yml"
+      - "addon/bench/fixtures/representative-benchmark.sql"
+      - "addon/bench/load.js"
+  workflow_dispatch:
+    inputs:
+      vus:
+        description: "Concurrent virtual users"
+        required: true
+        default: "64"
+        type: string
+      duration:
+        description: "Duration per run (for example 30s or 60s)"
+        required: true
+        default: "60s"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bench
+          POSTGRES_PASSWORD: bench
+          POSTGRES_DB: torrentio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bench -d torrentio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@v7
+        with:
+          ref: direct-streaming
+
+      - name: Checkout upstream baseline
+        uses: actions/checkout@v7
+        with:
+          repository: HashimFaisal/HashimFaisal-Torrentio
+          ref: torrentio
+          path: official
+          fetch-depth: 1
+
+      - name: Validate benchmark settings
+        env:
+          VUS: ${{ inputs.vus || '64' }}
+          DURATION: ${{ inputs.duration || '60s' }}
+        run: |
+          set -eu
+          case "$VUS" in ''|*[!0-9]*) echo "VUS must be a positive integer" >&2; exit 1 ;; esac
+          test "$VUS" -ge 1
+          case "$DURATION" in *s|*m) ;; *) echo "DURATION must end in s or m" >&2; exit 1 ;; esac
+          echo "VUS=$VUS" >> "$GITHUB_ENV"
+          echo "DURATION=$DURATION" >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Generate representative synthetic dataset
+        env:
+          PGPASSWORD: bench
+        run: |
+          psql -v ON_ERROR_STOP=1 "postgres://bench:bench@127.0.0.1:5432/torrentio" \
+            -f addon/bench/fixtures/representative-benchmark.sql
+          for n in $(seq 9000000 9000099); do
+            printf 'movie tt%s\n' "$n"
+          done > addon/bench/representative-targets.txt
+          test "$(wc -l < addon/bench/representative-targets.txt)" -eq 100
+
+      - name: Build both revisions
+        run: |
+          docker build -t torrentio-candidate ./addon
+          docker build -t torrentio-upstream ./official/addon
+
+      - name: Start both revisions against the same database
+        run: |
+          docker run -d --name torrentio-candidate --network host \
+            -e DATABASE_URI=postgres://bench:bench@127.0.0.1:5432/torrentio \
+            -e HOST=127.0.0.1 -e PORT=7000 torrentio-candidate
+          docker run -d --name torrentio-upstream --network host \
+            -e DATABASE_URI=postgres://bench:bench@127.0.0.1:5432/torrentio \
+            -e HOST=127.0.0.1 -e PORT=7001 torrentio-upstream
+
+      - name: Verify identical lookup coverage and warm both instances
+        run: |
+          set -eu
+          cleanup() {
+            docker logs torrentio-candidate || true
+            docker logs torrentio-upstream || true
+            docker rm -f torrentio-candidate torrentio-upstream || true
+          }
+          trap cleanup EXIT
+          for port in 7000 7001; do
+            ready=0
+            for attempt in $(seq 1 45); do
+              if curl --fail --silent "http://127.0.0.1:$port/manifest.json" -o "/tmp/manifest-$port.json"; then ready=1; break; fi
+              sleep 2
+            done
+            test "$ready" -eq 1
+            for n in $(seq 9000000 9000099); do
+              id="tt$n"
+              curl --fail --silent "http://127.0.0.1:$port/stream/movie/$id.json" -o /tmp/lookup.json
+              jq -e '.streams | type == "array"' /tmp/lookup.json >/dev/null
+            done
+          done
+
+      - name: Run six alternating hot-cache benchmark rounds
+        run: |
+          set -eu
+          run_case() {
+            label="$1"
+            port="$2"
+            docker run --rm --network host --user "$(id -u):$(id -g)" \
+              --volume "$GITHUB_WORKSPACE/addon/bench:/work" --workdir /work \
+              -e BASE="http://127.0.0.1:$port" -e MODE=hot -e VUS -e DURATION \
+              -e TARGETS=/work/representative-targets.txt \
+              grafana/k6:0.54.0 run --summary-export="/work/$label.json" load.js
+          }
+          run_case upstream-round-1 7001
+          run_case candidate-round-1 7000
+          run_case candidate-round-2 7000
+          run_case upstream-round-2 7001
+          run_case upstream-round-3 7001
+          run_case candidate-round-3 7000
+
+      - name: Upload comparison reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: torrent-engine-representative-comparison-${{ github.run_id }}
+          path: |
+            addon/bench/upstream-round-*.json
+            addon/bench/candidate-round-*.json
+            addon/bench/representative-targets.txt
+          if-no-files-found: ignore
+          retention-days: 30
