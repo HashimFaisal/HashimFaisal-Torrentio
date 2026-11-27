@@ -17,6 +17,21 @@ function exactEpisode(item, season, episode) {
     "E0?" + Number(episode) + "(?![0-9])", "i");
   return re.test(str(item.name));
 }
+
+// Heuristic ranking for constrained connections: prefer a healthy swarm and
+// manageable file sizes over maximum resolution. This ranks options only;
+// actual throughput still depends on peers and the user's network.
+function weakNetworkScore(seeds, peers, bytes, quality) {
+  var q = str(quality).toLowerCase();
+  var qualityBonus = /2160|4k|uhd/.test(q) ? -8 :
+    /1080/.test(q) ? 4 : /720/.test(q) ? 8 :
+    /480|sd|480p/.test(q) ? 3 : 0;
+  var sizeGiB = bytes / (1024 * 1024 * 1024);
+  return Math.log(seeds + 1) * 8 +
+    Math.log(peers + 1) * 2 +
+    qualityBonus -
+    Math.log(sizeGiB + 1) * 6;
+}
 async function imdbFor(tmdbId, mediaType) {
   var key = typeof TMDB_API_KEY !== "undefined" ? TMDB_API_KEY : "";
   if (!key) throw new Error("Nuvio TMDB key unavailable");
@@ -80,15 +95,16 @@ function toStreams(items, kind, season, episode) {
       codec: str(item.codec),
       hdr: str(item.hdr),
       qualityScore: score,
+      networkScore: weakNetworkScore(seeds, Number(item.leechers || 0), bytes, quality),
       verifile: str(item.verifile),
       description: detail
     });
   }
-  // Prefer the healthiest swarm first; quality is the tie-breaker.
+  // Prefer swarms that are more practical on constrained connections.
   out.sort(function(a,b) {
+    if (b.networkScore !== a.networkScore) return b.networkScore - a.networkScore;
     if (b.seeders !== a.seeders) return b.seeders - a.seeders;
-    if (b.qualityScore !== a.qualityScore) return b.qualityScore - a.qualityScore;
-    return b.peers - a.peers;
+    return b.qualityScore - a.qualityScore;
   });
   return out.slice(0, MAX_RESULTS);
 }
@@ -117,9 +133,9 @@ async function getStreams(tmdbId, mediaType, season, episode) {
       if (collected.length >= 5) break;
     }
     collected.sort(function(a,b) {
+      if (b.networkScore !== a.networkScore) return b.networkScore - a.networkScore;
       if (b.seeders !== a.seeders) return b.seeders - a.seeders;
-      if (b.qualityScore !== a.qualityScore) return b.qualityScore - a.qualityScore;
-      return b.peers - a.peers;
+      return b.qualityScore - a.qualityScore;
     });
     return collected.slice(0, MAX_RESULTS);
   } catch (err) {
