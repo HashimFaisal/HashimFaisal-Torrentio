@@ -21,16 +21,27 @@ function exactEpisode(item, season, episode) {
 // Heuristic ranking for constrained connections: prefer a healthy swarm and
 // manageable file sizes over maximum resolution. This ranks options only;
 // actual throughput still depends on peers and the user's network.
-function weakNetworkScore(seeds, peers, bytes, quality) {
+// Estimate swarm usability from supply, demand, file size and resolution.
+// Leechers are demand, not extra capacity: a crowded swarm must not outrank
+// an equally-sized healthy swarm merely because many clients are downloading.
+function weakNetworkScore(seeds, leechers, bytes, quality) {
   var q = str(quality).toLowerCase();
-  var qualityBonus = /2160|4k|uhd/.test(q) ? -8 :
+  var qualityBonus = /2160|4k|uhd/.test(q) ? -10 :
     /1080/.test(q) ? 4 : /720/.test(q) ? 8 :
-    /480|sd|480p/.test(q) ? 3 : 0;
+    /480|sd/.test(q) ? 3 : 0;
   var sizeGiB = bytes / (1024 * 1024 * 1024);
-  return Math.log(seeds + 1) * 8 +
-    Math.log(peers + 1) * 2 +
+  var ratio = (seeds + 1) / (leechers + 1);
+  var ratioScore = Math.max(-12, Math.min(12, Math.log(ratio) / Math.LN2 * 5));
+  return Math.log(seeds + 1) * 10 +
+    ratioScore -
+    Math.log(leechers + 1) * 3 +
     qualityBonus -
     Math.log(sizeGiB + 1) * 6;
+}
+function swarmHealth(seeds, leechers) {
+  if (seeds >= 8 && seeds >= leechers) return "healthy";
+  if (seeds >= 3 && seeds * 2 >= leechers) return "contended";
+  return "thin";
 }
 async function imdbFor(tmdbId, mediaType) {
   var key = typeof TMDB_API_KEY !== "undefined" ? TMDB_API_KEY : "";
@@ -66,11 +77,16 @@ function toStreams(items, kind, season, episode) {
     var item = items[i] || {};
     var hash = str(item.infoHash).toLowerCase();
     var magnet = str(item.magnet);
+    var magnetMatch = magnet.match(/(?:^|[?&])xt=urn:btih:([a-f0-9]{40})(?:&|$)/i);
     var seeds = Number(item.seeders || 0);
+    var leechers = Number(item.leechers || 0);
     var bytes = Number(item.size || 0);
-    if (!validHash(hash) || magnet.indexOf("magnet:?xt=urn:btih:") !== 0 ||
-        seen[hash] || seeds < 1 || !isFinite(bytes) || bytes <= 0) continue;
-    if (item.verifile === "failed") continue;
+    if (!validHash(hash) || !magnetMatch ||
+        magnetMatch[1].toLowerCase() !== hash ||
+        seen[hash] || !isFinite(seeds) || seeds < 1 ||
+        !isFinite(leechers) || leechers < 0 ||
+        !isFinite(bytes) || bytes <= 0) continue;
+    if (str(item.verifile).toLowerCase() === "failed") continue;
     if (kind !== "movie" && !exactEpisode(item, season, episode)) continue;
     // Discard clearly corrupt index sizes, rather than presenting multi-terabyte movie files.
     if (kind === "movie" && bytes > 200 * 1024 * 1024 * 1024) continue;
@@ -95,7 +111,8 @@ function toStreams(items, kind, season, episode) {
       codec: str(item.codec),
       hdr: str(item.hdr),
       qualityScore: score,
-      networkScore: weakNetworkScore(seeds, Number(item.leechers || 0), bytes, quality),
+      networkScore: weakNetworkScore(seeds, leechers, bytes, quality),
+      swarmHealth: swarmHealth(seeds, leechers),
       verifile: str(item.verifile),
       description: detail
     });
