@@ -35,7 +35,25 @@ var TMDB_CACHE_MS = 6 * 60 * 60 * 1000;
 var INDEX_CACHE_MS = 90 * 1000;
 
 function str(v) { return v === null || v === undefined ? "" : String(v); }
-function validHash(v) { return /^[a-f0-9]{40}$/i.test(str(v)); }
+function normalizeBtih(value) {
+  var hash = str(value).trim();
+  if (/^[a-f0-9]{40}$/i.test(hash)) return hash.toLowerCase();
+  if (!/^[a-z2-7]{32}$/i.test(hash)) return "";
+  var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  var buffer = 0, bits = 0, hex = "";
+  for (var i = 0; i < hash.length; i++) {
+    buffer = (buffer << 5) | alphabet.indexOf(hash.charAt(i).toUpperCase());
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      var byte = (buffer >> bits) & 255;
+      hex += (byte < 16 ? "0" : "") + byte.toString(16);
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  return hex.length === 40 && bits === 0 ? hex : "";
+}
+function validHash(v) { return normalizeBtih(v) !== ""; }
 function isPack(name) {
   return /S\d{1,2}E\d{1,3}\s*[-–]\s*\d{1,3}/i.test(str(name)) ||
     /\b(?:complete|season pack|batch)\b/i.test(str(name));
@@ -241,14 +259,15 @@ function toStreams(items, kind, season, episode) {
   var seen = Object.create(null), out = [];
   for (var i = 0; i < items.length; i++) {
     var item = items[i] || {};
-    var hash = str(item.infoHash).toLowerCase();
+    var hash = normalizeBtih(item.infoHash);
     var magnet = str(item.magnet);
-    var magnetMatch = magnet.match(/(?:^|[?&])xt=urn:btih:([a-f0-9]{40})(?:&|$)/i);
+    var magnetMatch = magnet.match(/(?:^|[?&])xt=urn:btih:([a-z2-7]{32}|[a-f0-9]{40})(?:&|$)/i);
+    var magnetHash = magnetMatch ? normalizeBtih(magnetMatch[1]) : "";
     var seeds = Number(item.seeders);
     var leechers = item.leechers === undefined || item.leechers === null || item.leechers === "" ? 0 : Number(item.leechers);
     var bytes = Number(item.size);
     if (!validHash(hash) || !magnetMatch ||
-        magnetMatch[1].toLowerCase() !== hash ||
+        magnetHash !== hash ||
         !validCount(seeds) || seeds < 1 ||
         !validCount(leechers) ||
         !isFinite(bytes) || bytes <= 0 ||
