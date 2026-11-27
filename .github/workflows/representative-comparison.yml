@@ -123,15 +123,31 @@ jobs:
 
       - name: Run six alternating hot-cache benchmark rounds
         run: |
-          set -eu
+          set -u
+          chmod -R a+rwX addon/bench
+          failures=0
           run_case() {
             label="$1"
             port="$2"
-            docker run --rm --network host --user "$(id -u):$(id -g)" \
+            echo "::group::${label}"
+            docker run --rm --network host \
               --volume "$GITHUB_WORKSPACE/addon/bench:/work" --workdir /work \
               -e BASE="http://127.0.0.1:$port" -e MODE=hot -e VUS -e DURATION \
               -e TARGETS=/work/representative-targets.txt \
               grafana/k6:0.54.0 run --summary-export="/work/$label.json" load.js
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "Benchmark round $label exited with status $status"
+              failures=$((failures + 1))
+            fi
+            if [ -f "addon/bench/$label.json" ]; then
+              echo "Summary created: addon/bench/$label.json"
+              jq '{metrics: {http_reqs: .metrics.http_reqs, http_req_failed: .metrics.http_req_failed, checks: .metrics.checks, http_req_duration: .metrics.http_req_duration}}' "addon/bench/$label.json" || true
+            else
+              echo "No summary JSON was created for $label"
+              failures=$((failures + 1))
+            fi
+            echo "::endgroup::"
           }
           run_case upstream-round-1 7001
           run_case candidate-round-1 7000
@@ -139,6 +155,8 @@ jobs:
           run_case upstream-round-2 7001
           run_case upstream-round-3 7001
           run_case candidate-round-3 7000
+          echo "Failed or missing benchmark rounds: $failures"
+          test "$failures" -eq 0
 
       - name: Upload comparison reports
         if: always()
