@@ -73,10 +73,7 @@ impl DirectSources {
 
     pub(crate) async fn resolve(&self, content_type: ContentType, id: &str) -> Result<Vec<Stream>> {
         let mut endpoint = self.endpoint.clone();
-        endpoint
-            .query_pairs_mut()
-            .append_pair("type", content_type.as_str())
-            .append_pair("id", id);
+        endpoint.query_pairs_mut().append_pair("type", content_type.as_str()).append_pair("id", id);
 
         let mut request = self.client.get(endpoint);
         if let Some(api_key) = &self.api_key {
@@ -89,19 +86,12 @@ impl DirectSources {
             .error_for_status()
             .context("direct source API returned an unsuccessful status")?;
 
-        if response
-            .content_length()
-            .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
-        {
+        if response.content_length().is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
             bail!("direct source API response exceeds the 1 MiB limit");
         }
 
         let mut body = Vec::new();
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .context("failed reading direct source API response")?
-        {
+        while let Some(chunk) = response.chunk().await.context("failed reading direct source API response")? {
             if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
                 bail!("direct source API response exceeds the 1 MiB limit");
             }
@@ -140,11 +130,7 @@ fn validate_stream(mut stream: Stream, allow_http: bool) -> Option<Stream> {
     let mut name_parts = stream.name.splitn(2, '\n');
     let provider_name = name_parts.next().unwrap_or_default().trim();
     let quality = name_parts.next().unwrap_or("Direct").trim();
-    let provider_name = if provider_name.is_empty() {
-        "Direct source"
-    } else {
-        provider_name
-    };
+    let provider_name = if provider_name.is_empty() { "Direct source" } else { provider_name };
     stream.name = format!("[HTTP] {provider_name}\n{quality}");
     Some(stream)
 }
@@ -270,9 +256,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/streams"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_string("x".repeat(MAX_RESPONSE_BYTES + 1)),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_string("x".repeat(MAX_RESPONSE_BYTES + 1)))
             .mount(&server)
             .await;
         let provider = DirectSources {
