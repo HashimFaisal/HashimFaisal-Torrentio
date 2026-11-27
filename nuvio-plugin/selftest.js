@@ -23,6 +23,7 @@ global.fetch = async (url) => {
   const hash = (c) => c.repeat(40);
   const rows = mode==="metadata" ? [
     {name:"Example.Release.1080p.BluRay",infoHash:hash("2"),magnet:"magnet:?xt=urn:btih:"+hash("2"),seeders:25,leechers:2,resolution:"1080p",size:2200000000,source:"BluRay",codec:"x265"},
+    {name:"Example.Release.1080p.BluRay.REPACK",infoHash:hash("2"),magnet:"magnet:?xt=urn:btih:"+hash("2"),seeders:60,leechers:4,resolution:"1080p",size:2200000000},
     {name:"Example.Release.720p.WEB",infoHash:hash("3"),magnet:"magnet:?xt=urn:btih:"+hash("3"),seeders:500,leechers:1,resolution:"2160p",size:900000000,source:"WEB",codec:"x264"},
     {name:"fractional swarm",infoHash:hash("4"),magnet:"magnet:?xt=urn:btih:"+hash("4"),seeders:3.5,leechers:1,resolution:"1080p",size:900000000},
     {name:"verification unavailable",infoHash:hash("5"),magnet:"magnet:?xt=urn:btih:"+hash("5"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"unknown"},
@@ -90,6 +91,15 @@ const {getStreams}=require("./torrentio.js");
   mode="metadata"; calls.length=0;
   const metadataResults=await getStreams("737373","movie",null,null);
   assert.equal(metadataResults.length,3);
+  const merged=metadataResults.find(x=>x.infoHash==="2".repeat(40));
+  assert.ok(merged);
+  assert.equal(merged.duplicateCount,2,
+    "duplicate rows with the same infoHash must collapse into one result");
+  assert.equal(merged.seeders,60,
+    "merged duplicate should retain the strongest available swarm count");
+  assert.equal(merged.metadataConfidence,100,
+    "merged duplicate should preserve the strongest metadata confidence");
+  assert.ok(merged.alternateTitles.includes("Example.Release.1080p.BluRay.REPACK"));
   const mismatch=metadataResults.find(x=>x.infoHash==="3".repeat(40));
   assert.ok(mismatch);
   assert.equal(mismatch.quality,"720p",
