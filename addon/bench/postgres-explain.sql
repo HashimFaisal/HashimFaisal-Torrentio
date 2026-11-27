@@ -80,3 +80,52 @@ EXPLAIN (ANALYZE, BUFFERS, SETTINGS, SUMMARY)
 SELECT "infoHash", "title", "imdbId", "imdbSeason", "imdbEpisode"
 FROM "files"
 WHERE "infoHash" = ANY(ARRAY[:'info_hash_1', :'info_hash_2']::text[]);
+
+-- Existing index definitions: inspect these before proposing any new index.
+SELECT schemaname, tablename, indexname, indexdef
+FROM pg_indexes
+WHERE tablename IN ('files', 'torrents')
+ORDER BY tablename, indexname;
+
+-- Table size and estimated row counts help explain plan choices.
+SELECT
+    relname AS table_name,
+    n_live_tup AS estimated_live_rows,
+    n_dead_tup AS estimated_dead_rows,
+    last_analyze,
+    last_autoanalyze,
+    pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
+    pg_size_pretty(pg_relation_size(relid)) AS heap_size
+FROM pg_stat_user_tables
+WHERE relname IN ('files', 'torrents')
+ORDER BY relname;
+
+-- Column statistics used by the planner for the lookup and join predicates.
+SELECT
+    tablename,
+    attname AS column_name,
+    null_frac,
+    n_distinct,
+    correlation,
+    most_common_vals,
+    most_common_freqs
+FROM pg_stats
+WHERE tablename IN ('files', 'torrents')
+  AND attname IN (
+      'infoHash', 'imdbId', 'imdbSeason', 'imdbEpisode',
+      'kitsuId', 'kitsuEpisode', 'seeders', 'uploadDate'
+  )
+ORDER BY tablename, attname;
+
+-- Index usage counters are cumulative since the last statistics reset.
+-- A low idx_scan count alone is not proof that an index is unused.
+SELECT
+    relname AS table_name,
+    indexrelname AS index_name,
+    idx_scan,
+    idx_tup_read,
+    idx_tup_fetch,
+    pg_size_pretty(pg_relation_size(indexrelid)) AS index_size
+FROM pg_stat_user_indexes
+WHERE relname IN ('files', 'torrents')
+ORDER BY relname, indexrelname;
