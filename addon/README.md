@@ -52,7 +52,9 @@ stderr, the rest to stdout. Message prefixes match the Node addon so existing Lo
 ## Benchmark
 
 `bench/load.js` drives `/stream` requests with k6 against a local Postgres copy (8M torrents, 16M files), Redis and
-Mongo, 64 concurrent connections, a distinct client IP per request so the rate limiter never triggers:
+Mongo, 64 concurrent connections, and a deterministic distinct client IP per iteration so the rate limiter never
+triggers. Hot-target selection and client IPs are repeatable across runs; the summary reports p50, p90, p95 and p99
+latency in addition to throughput and checks:
 
 ```
 BASE=http://127.0.0.1:7002 MODE=hot  TARGETS=hot_targets.txt  VUS=64 k6 run bench/load.js
