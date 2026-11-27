@@ -84,9 +84,11 @@ function toStreams(items, kind, season, episode) {
       description: detail
     });
   }
+  // Prefer the healthiest swarm first; quality is the tie-breaker.
   out.sort(function(a,b) {
+    if (b.seeders !== a.seeders) return b.seeders - a.seeders;
     if (b.qualityScore !== a.qualityScore) return b.qualityScore - a.qualityScore;
-    return b.seeders - a.seeders;
+    return b.peers - a.peers;
   });
   return out.slice(0, MAX_RESULTS);
 }
