@@ -27,7 +27,7 @@ The direct path is now integrated as an optional adapter alongside the existing 
 
 ## Source adapter contract
 
-The first implementation is a generic HTTPS API adapter configured with `DIRECT_STREAM_API_URL`. It sends `type` and `id` query parameters and expects a JSON object with a `streams` array. Each stream uses the existing Stremio shape: `name` (two lines: provider and quality), `title`, `url`, and optional `behaviorHints`. The response is capped at 1 MiB and 20 candidates; requests time out after 8 seconds and redirects are disabled. Playback URLs must use HTTPS unless `DIRECT_STREAM_ALLOW_HTTP=true` is explicitly set. Direct candidates receive a 60-second cache lifetime and bypass provider-name and minimum-seeder filters.
+The first implementation is a generic HTTPS API adapter configured with `DIRECT_STREAM_API_URL`. Set `DIRECT_STREAM_API_KEY` to send an optional `Authorization: Bearer` token; the key is never included in logs. It sends `type` and `id` query parameters and expects a JSON object with a `streams` array. Each stream uses the existing Stremio shape: `name` (two lines: provider and quality), `title`, `url`, and optional `behaviorHints`. The response is capped at 1 MiB and 20 candidates; requests time out after 8 seconds and redirects are disabled. Playback URLs must use HTTPS unless `DIRECT_STREAM_ALLOW_HTTP=true` is explicitly set. Direct candidates receive a 60-second cache lifetime and bypass provider-name and minimum-seeder filters.
 
 Set `DIRECT_STREAM_ONLY=true` to disable PostgreSQL initialization, torrent database lookups, and tracker initialization entirely. `DATABASE_URI` may be omitted in this mode. A working configured direct-source API is still required; otherwise the addon starts with a warning and returns no streams.
 
@@ -60,6 +60,7 @@ Initially support direct HTTPS progressive media and HLS/DASH URLs only when the
 ### Phase A — contract and compatibility
 - [x] Add the configurable HTTPS source adapter and integrate it into stream resolution.
 - [x] Add public-URL validation, response-size/time limits, and tests for HTTP(S), unsafe schemes, private/local destinations, and direct-source filtering.
+- [x] Support optional bearer authentication and test the real HTTP request contract and oversized responses.
 - [ ] Add safe availability/latency probes and measured source ranking.
 - Add tests for progressive HTTP, HLS, redirects, invalid/private URLs, and timeouts.
 
