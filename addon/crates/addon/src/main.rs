@@ -49,13 +49,13 @@ async fn run() -> anyhow::Result<()> {
     let direct_stream_only = env("DIRECT_STREAM_ONLY")
         .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
     let (repository, postgres_repository): (Arc<dyn TorrentRepository>, Option<Repository>) = if direct_stream_only {
-            tracing::info!("Direct-only mode enabled; PostgreSQL torrent repository is not initialized");
-            (Arc::new(EmptyRepository), None)
-        } else {
-            let database_url = env("DATABASE_URI").context("DATABASE_URI is required unless DIRECT_STREAM_ONLY=true")?;
-            let repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
-            (Arc::clone(&repository) as Arc<dyn TorrentRepository>, Some((*repository).clone()))
-        };
+        tracing::info!("Direct-only mode enabled; PostgreSQL torrent repository is not initialized");
+        (Arc::new(EmptyRepository), None)
+    } else {
+        let database_url = env("DATABASE_URI").context("DATABASE_URI is required unless DIRECT_STREAM_ONLY=true")?;
+        let repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
+        (Arc::clone(&repository) as Arc<dyn TorrentRepository>, Some((*repository).clone()))
+    };
 
     let mut invalidations = None;
     let stores = match env("MONGODB_URI") {
