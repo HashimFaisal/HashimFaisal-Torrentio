@@ -55,3 +55,9 @@ The self-test fixtures cover parallel provider fan-out, provider failure isolati
 Provider coverage is split by catalog: [The RarBg public JSON API](https://therarbg.com/developers/) covers movies and TV; [YTS API](https://yts.proxyninja.org/api) supplements movie releases; [EZTV API](https://eztvx.to/api/) supplements TV episodes. YTS is movie-only and its catalog is selective, while EZTV's API is documented as beta. Provider uptime, catalog coverage, and swarm counts can change independently. TV packs and multi-episode ranges are intentionally filtered; this improves episode precision but can reduce result counts.
 
 TMDB and The RarBg are third-party services and may change availability or response formats. Use torrents only where you have the rights and permission to access the content.
+
+
+### Release metadata enrichment
+- Release titles are parsed for common source labels (BluRay, WEB-DL, WEBRip, HDTV), video codecs (AV1, HEVC/x265, H.264/x264), HDR formats (HDR10+, HDR, Dolby Vision), and audio tags (TrueHD, DTS-HD, Atmos, E-AC3).
+- Inferred tags are exposed as descriptive metadata and explicitly marked with `*-inferred-from-title` warnings. They do not increase metadata confidence or claim independent verification.
+- Duplicate infoHash merges preserve the enriched source, codec, HDR, and audio details.
