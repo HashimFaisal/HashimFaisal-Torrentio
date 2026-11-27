@@ -129,7 +129,9 @@ impl Cache {
             streams: Moka::<String, Timed<StreamEntry>>::builder()
                 .max_capacity(stream_bytes)
                 .weigher(|key, entry| {
-                    let weight = key.len() + entry.value.packed.len() + decoded_stream_bytes(&entry.value.decoded, entry.value.decoded.capacity());
+                    let weight = key.len()
+                        + entry.value.packed.len()
+                        + decoded_stream_bytes(&entry.value.decoded, entry.value.decoded.capacity());
                     u32::try_from(weight).unwrap_or(u32::MAX)
                 })
                 .expire_after(PerEntryTtl)
