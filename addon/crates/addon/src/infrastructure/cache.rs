@@ -74,16 +74,19 @@ fn decoded_stream_bytes(streams: &[Stream]) -> usize {
                     + optional_string_bytes(stream.info_hash.as_ref())
                     + optional_string_bytes(stream.url.as_ref())
                     + stream.sources.as_ref().map_or(0, |sources| {
-                        size_of::<String>() * sources.capacity()
-                            + sources.iter().map(String::capacity).sum::<usize>()
+                        size_of::<String>() * sources.capacity() + sources.iter().map(String::capacity).sum::<usize>()
                     })
                     + stream.behavior_hints.as_ref().map_or(0, |hints| {
                         optional_string_bytes(hints.binge_group.as_ref())
                             + optional_string_bytes(hints.filename.as_ref())
                             + optional_string_bytes(hints.video_hash.as_ref())
-                            + hints.extra.iter().map(|(key, value)| {
-                                size_of::<(String, Value)>() + key.capacity() + json_heap_bytes(value)
-                            }).sum::<usize>()
+                            + hints
+                                .extra
+                                .iter()
+                                .map(|(key, value)| {
+                                    size_of::<(String, Value)>() + key.capacity() + json_heap_bytes(value)
+                                })
+                                .sum::<usize>()
                     })
             })
             .sum::<usize>()
