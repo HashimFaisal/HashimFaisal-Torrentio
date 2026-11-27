@@ -23,12 +23,7 @@ impl TorrentRepository for EmptyRepository {
         Ok(Vec::new())
     }
 
-    async fn imdb_series_entries(
-        &self,
-        _imdb_id: &str,
-        _season: i32,
-        _episode: i32,
-    ) -> anyhow::Result<Vec<Record>> {
+    async fn imdb_series_entries(&self, _imdb_id: &str, _season: i32, _episode: i32) -> anyhow::Result<Vec<Record>> {
         Ok(Vec::new())
     }
 
