@@ -1,14 +1,14 @@
 {
   "name": "Torrentio Local",
-  "version": "0.3.0",
-  "description": "Multi-source torrent discovery with parallel The RarBg, YTS and EZTV search, cross-provider deduplication, swarm-aware ranking, metadata confidence, and resilient provider isolation.",
+  "version": "0.4.0",
+  "description": "Multi-source torrent discovery with provider circuit breakers, adaptive network profiles, latency monitoring, structured diagnostics, and resilient parallel search.",
   "author": "HashimFaisal",
   "scrapers": [
     {
       "id": "torrentio-local",
       "name": "Torrentio Local",
-      "description": "Parallel multi-catalog movie and TV torrent discovery with provider fallback, cross-source deduplication, swarm-aware ranking, and metadata validation. Nuvio handles P2P playback.",
-      "version": "0.3.0",
+      "description": "Adaptive multi-catalog movie and TV torrent discovery with automatic provider cooldown, network-aware ranking, structured failure diagnostics, and metadata validation. Nuvio handles P2P playback.",
+      "version": "0.4.0",
       "filename": "torrentio.js",
       "supportedTypes": [
         "movie",
