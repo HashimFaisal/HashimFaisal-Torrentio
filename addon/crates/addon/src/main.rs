@@ -105,7 +105,8 @@ async fn run() -> anyhow::Result<()> {
     let listener = TcpListener::bind(SocketAddr::new(host, port)).await?;
     if direct_stream_only {
         tracing::info!(port, "Started addon in direct-only mode");
-    } else {
+    }
+    if !direct_stream_only {
         tokio::spawn(async move {
             init_best_trackers().await;
             tracing::info!(port, "Started addon");
