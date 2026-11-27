@@ -185,9 +185,11 @@ impl Addon {
             .await
     }
 
-    async fn records(&self, content_type: ContentType, id: &str) -> Result<Vec<Record>, HandlerError> {        let result = if content_type == ContentType::Movie {
+    async fn records(&self, content_type: ContentType, id: &str) -> Result<Vec<Record>, HandlerError> {
+        let result = if content_type == ContentType::Movie {
             self.movie_records(id).await
-        } else {            self.series_records(id).await
+        } else {
+            self.series_records(id).await
         };
         result.map_err(HandlerError::failed)
     }
@@ -220,6 +222,7 @@ impl Addon {
         }
         Ok(Vec::new())
     }
+
     fn with_cache_params(&self, streams: Vec<Stream>) -> StreamsResponse {
         let cache_age = if streams.is_empty() {
             CACHE_MAX_AGE_EMPTY
@@ -364,10 +367,12 @@ mod tests {
         }
 
         async fn item_meta(&self, item_id: &str, _: &str, _: Option<&str>) -> MochResult<ItemMeta> {
-            Err(match item_id {                "" => MochError::message("must not be called"),
+            Err(match item_id {
+                "" => MochError::message("must not be called"),
                 "bad-token" => CommonError::BadToken.into(),
                 "denied" => CommonError::AccessDenied.into(),
-                "boom" => MochError::message("boom"),                _ => CommonError::NotFound.into(),
+                "boom" => MochError::message("boom"),
+                _ => CommonError::NotFound.into(),
             })
         }
 
@@ -398,7 +403,8 @@ mod tests {
                 info_hash: info_hash.to_owned(),
                 provider: "YTS".to_owned(),
                 torrent_id: None,
-                title: title.to_owned(),                size: Some(1_610_612_736),
+                title: title.to_owned(),
+                size: Some(1_610_612_736),
                 kind: "movie".to_owned(),
                 upload_date: Utc::now(),
                 seeders: Some(seeders),
@@ -544,8 +550,10 @@ mod tests {
         assert!(harness.rate_limited("tt3", &config).await);
         assert_eq!(harness.repository.lookups.load(Ordering::SeqCst), 2);
     }
+
     #[tokio::test]
-    async fn empty_results_count_against_the_empty_budget() {        let harness = harness_with(FakeRepository::default(), enforcing(100, 1));
+    async fn empty_results_count_against_the_empty_budget() {
+        let harness = harness_with(FakeRepository::default(), enforcing(100, 1));
         let config = config_from("1.1.1.1", "");
         harness.movies(&["tt1", "tt2"], &config).await;
         assert!(harness.rate_limited("tt3", &config).await);
@@ -575,7 +583,8 @@ mod tests {
     #[tokio::test]
     async fn surfaces_repository_failures_with_their_cause() {
         let harness = harness(FakeRepository { fail: true, ..FakeRepository::default() });
-        let error = harness.addon.streams("movie", "tt0000001", &config("")).await.unwrap_err();        assert!(error.to_string().contains("database is down"));
+        let error = harness.addon.streams("movie", "tt0000001", &config("")).await.unwrap_err();
+        assert!(error.to_string().contains("database is down"));
     }
 
     #[tokio::test]
