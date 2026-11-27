@@ -1,14 +1,14 @@
 {
   "name": "Torrentio Local",
-  "version": "0.1.6",
-  "description": "Torrent discovery with swarm-health ranking, verified magnet metadata, and short-lived request caching.",
+  "version": "0.1.7",
+  "description": "Torrent discovery with swarm-health ranking, verified magnet metadata, caching, and resilient API retries.",
   "author": "HashimFaisal",
   "scrapers": [
     {
       "id": "torrentio-local",
       "name": "Torrentio Local",
-      "description": "Swarm-aware movie and TV torrent discovery with magnet integrity checks and short-lived request caching. Nuvio handles P2P playback.",
-      "version": "0.1.6",
+      "description": "Swarm-aware movie and TV torrent discovery with magnet integrity checks, short-lived caching, and bounded API retry recovery. Nuvio handles P2P playback.",
+      "version": "0.1.7",
       "filename": "torrentio.js",
       "supportedTypes": [
         "movie",
