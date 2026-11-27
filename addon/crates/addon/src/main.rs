@@ -9,7 +9,9 @@ use addon::{
     application::Addon,
     domain::TorrentRepository,
     http::{AppState, app},
-    infrastructure::{Budgets, Cache, EmptyRepository, Metrics, RateLimiter, Repository, Stores, init_best_trackers, logging, store},
+    infrastructure::{
+        Budgets, Cache, EmptyRepository, Metrics, RateLimiter, Repository, Stores, init_best_trackers, logging, store,
+    },
     providers::{Context, Endpoints, Mochs, default_providers},
 };
 use anyhow::Context as _;
@@ -46,8 +48,7 @@ async fn run() -> anyhow::Result<()> {
     metrics.spawn_lag_sampler();
     let direct_stream_only = env("DIRECT_STREAM_ONLY")
         .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
-    let (repository, postgres_repository): (Arc<dyn TorrentRepository>, Option<Repository>) =
-        if direct_stream_only {
+    let (repository, postgres_repository): (Arc<dyn TorrentRepository>, Option<Repository>) = if direct_stream_only {
             tracing::info!("Direct-only mode enabled; PostgreSQL torrent repository is not initialized");
             (Arc::new(EmptyRepository), None)
         } else {
