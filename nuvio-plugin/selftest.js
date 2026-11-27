@@ -21,7 +21,7 @@ global.fetch = async (url) => {
 const {getStreams}=require("./torrentio.js");
 (async()=>{
   let r=await getStreams("27205","movie",null,null);
-  assert.equal(r.length,1); assert.equal(r[0].quality,"2160p");
+  assert.equal(r.length,1); assert.equal(r[0].quality,"2160p"); assert.equal(typeof r[0].size,"number"); assert.equal(r[0].size,1000000000);
   assert.match(calls[1],/imdb=tt1375666/);
   mode="tv"; calls.length=0;
   r=await getStreams("1396","tv",1,1);
