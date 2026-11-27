@@ -215,11 +215,27 @@ function releaseMetadata(item) {
   var fromTitle = resolutionRank(title);
   var conflict = structured > 0 && fromTitle > 0 && structured !== fromTitle;
   var rank = structured && fromTitle ? Math.min(structured, fromTitle) : (structured || fromTitle);
+  // Infer presentation tags from release names without overstating confidence.
+  var inferredSource = /blu.?ray|bdrip|brrip/i.test(title) ? "BluRay" :
+    /web.?dl/i.test(title) ? "WEB-DL" : /web.?rip/i.test(title) ? "WEBRip" :
+    /hdtv/i.test(title) ? "HDTV" : "";
+  var inferredCodec = /\bav1\b/i.test(title) ? "AV1" :
+    /x265|h\.?265|hevc/i.test(title) ? "HEVC" :
+    /x264|h\.?264|avc/i.test(title) ? "H.264" : "";
+  var inferredHdr = /dolby.?vision|\bdovi\b/i.test(title) ? "Dolby Vision" :
+    /hdr10\+/i.test(title) ? "HDR10+" : /\bhdr\b/i.test(title) ? "HDR" : "";
+  var inferredAudio = /truehd/i.test(title) ? "TrueHD" :
+    /dts.?hd|dts.?x/i.test(title) ? "DTS-HD" :
+    /\batmos\b/i.test(title) ? "Atmos" : /\beac3\b|\bddp\b/i.test(title) ? "E-AC3" : "";
+  var source = str(item.source) || inferredSource;
+  var codec = str(item.codec) || inferredCodec;
+  var hdr = str(item.hdr) || inferredHdr;
   var warnings = [];
   if (conflict) warnings.push("resolution-conflict");
-  if (!str(item.source)) warnings.push("missing-source");
-  if (!str(item.codec)) warnings.push("missing-codec");
-  if (!str(item.hdr) && /hdr|dolby.?vision/i.test(title)) warnings.push("hdr-not-structured");
+  if (!str(item.source)) warnings.push(inferredSource ? "source-inferred-from-title" : "missing-source");
+  if (!str(item.codec)) warnings.push(inferredCodec ? "codec-inferred-from-title" : "missing-codec");
+  if (!str(item.hdr) && inferredHdr) warnings.push("hdr-inferred-from-title");
+  if (!str(item.audio) && inferredAudio) warnings.push("audio-inferred-from-title");
   var verification = str(item.verifile).toLowerCase().trim();
   if (verification && verification !== "verified") warnings.push("verification-unconfirmed");
   var confidence = 100;
@@ -230,10 +246,9 @@ function releaseMetadata(item) {
   if (!title || title.length < 8) confidence -= 20;
   if (!rank) confidence -= 10;
   return {
-    quality: resolutionLabel(rank),
-    confidence: Math.max(0, confidence),
-    warnings: warnings,
-    conflict: conflict
+    quality: resolutionLabel(rank), source: source, codec: codec, hdr: hdr,
+    audio: str(item.audio) || inferredAudio,
+    confidence: Math.max(0, confidence), warnings: warnings, conflict: conflict
   };
 }
 function validCount(value) {
@@ -401,7 +416,7 @@ function toStreams(items, kind, season, episode, diagnostics, profile) {
     var profileRules = NETWORK_PROFILES[selectedProfile] || NETWORK_PROFILES.medium;
     var maxGiB = kind === "movie" ? profileRules.movieMaxGiB : profileRules.episodeMaxGiB;
     var networkFit = bytes <= maxGiB * 1024 * 1024 * 1024 ? "recommended-size" : "large-for-profile";
-    var detail = [str(item.source), str(item.codec), str(item.hdr)].filter(Boolean).join(" · ");
+    var detail = [metadata.source, metadata.codec, metadata.hdr, metadata.audio].filter(Boolean).join(" · ");
     var score = Number(item.qualityScore || 0);
     var candidate = {
       title: str(item.name) || "Torrent release",
@@ -416,9 +431,10 @@ function toStreams(items, kind, season, episode, diagnostics, profile) {
       seeders: seeds,
       peers: Number(item.leechers || 0),
       infoHash: hash,
-      source: str(item.source),
-      codec: str(item.codec),
-      hdr: str(item.hdr),
+      source: metadata.source,
+      codec: metadata.codec,
+      hdr: metadata.hdr,
+      audio: metadata.audio,
       qualityScore: score,
       networkScore: weakNetworkScore(seeds, leechers, bytes, quality, selectedProfile),
       networkProfile: selectedProfile,
