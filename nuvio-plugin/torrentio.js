@@ -46,7 +46,9 @@ function providerState(name) {
     requests: 0, successes: 0, failures: 0, results: 0, lastLatencyMs: 0,
     averageLatencyMs: 0, consecutiveFailures: 0, circuitOpenUntil: 0,
     lastError: "", lastErrorKind: "", lastSuccessAt: 0, lastFailureAt: 0,
-    windowStartedAt: Date.now(), windowRequests: 0, windowFailures: 0
+    windowStartedAt: Date.now(), windowRequests: 0, windowFailures: 0,
+    probeInFlight: false, skippedRequests: 0, emptyResponses: 0,
+    lastResultCount: 0, lastStatusCode: 0, lastOutcome: "not-yet-queried"
   });
 }
 function classifyProviderError(error) {
@@ -69,13 +71,17 @@ function recordProvider(name, startedAt, ok, detail) {
   state.lastLatencyMs = latency;
   state.averageLatencyMs = state.averageLatencyMs ? Math.round(state.averageLatencyMs * 0.7 + latency * 0.3) : latency;
   if (ok) {
-    state.successes++; state.results += detail || 0; state.lastError = "";
-    state.lastErrorKind = ""; state.consecutiveFailures = 0;
+    var resultCount = Number(detail) || 0;
+    state.successes++; state.results += resultCount; state.lastResultCount = resultCount;
+    state.lastOutcome = resultCount ? "success-with-results" : "success-empty";
+    if (!resultCount) state.emptyResponses++;
+    state.lastError = ""; state.lastErrorKind = ""; state.consecutiveFailures = 0;
     state.lastSuccessAt = Date.now();
     if (latency >= PROVIDER_SLOW_THRESHOLD_MS) {
       state.circuitOpenUntil = Date.now() + PROVIDER_SLOW_COOLDOWN_MS;
       state.lastErrorKind = "provider-slow-response";
       state.lastError = "Catalog lookup took " + latency + "ms; temporary cooldown applied";
+      state.lastOutcome = "slow-response";
     } else {
       state.circuitOpenUntil = 0; state.lastErrorKind = ""; state.lastError = "";
     }
@@ -83,8 +89,14 @@ function recordProvider(name, startedAt, ok, detail) {
     state.failures++; state.windowFailures++; state.consecutiveFailures++;
     state.lastError = str(detail && detail.message ? detail.message : detail || "provider failed").slice(0, 180);
     state.lastErrorKind = classifyProviderError(detail);
+    var statusMatch = state.lastError.match(/HTTP\\s+(\\d{3})/i);
+    state.lastStatusCode = statusMatch ? Number(statusMatch[1]) : 0;
+    state.lastOutcome = state.lastErrorKind;
     state.lastFailureAt = Date.now();
-    if (state.consecutiveFailures >= PROVIDER_FAILURE_THRESHOLD) state.circuitOpenUntil = Date.now() + PROVIDER_COOLDOWN_MS;
+    // A failed half-open probe immediately reopens the circuit.
+    if (state.consecutiveFailures >= PROVIDER_FAILURE_THRESHOLD || state.circuitOpenUntil > 0) {
+      state.circuitOpenUntil = Date.now() + PROVIDER_COOLDOWN_MS;
+    }
   }
 }
 
@@ -510,11 +522,20 @@ function mergeProviderResults(groups) {
 }
 async function runProvider(name, loader) {
   var state = providerState(name);
-  if (state.circuitOpenUntil > Date.now()) {
+  var now = Date.now();
+  if (state.circuitOpenUntil > now) {
+    state.skippedRequests++;
     console.warn("[Torrentio Local] provider skipped (cooldown) " + name + " until " + new Date(state.circuitOpenUntil).toISOString());
     return [];
   }
-  // Once the cooldown expires, one request is allowed as a half-open recovery probe.
+  // Permit exactly one half-open probe after cooldown, even when Nuvio issues
+  // several identical lookups concurrently.
+  var isProbe = state.circuitOpenUntil > 0;
+  if (isProbe && state.probeInFlight) {
+    state.skippedRequests++;
+    return [];
+  }
+  if (isProbe) state.probeInFlight = true;
   var started = Date.now();
   try {
     var streams = await loader();
@@ -524,6 +545,8 @@ async function runProvider(name, loader) {
     recordProvider(name, started, false, error);
     console.warn("[Torrentio Local] provider " + name + " [" + providerState(name).lastErrorKind + "]: " + (error && error.message ? error.message : error));
     return [];
+  } finally {
+    if (isProbe) state.probeInFlight = false;
   }
 }
 async function getStreams(tmdbId, mediaType, season, episode) {
