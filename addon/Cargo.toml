@@ -49,6 +49,7 @@ tower-http = { version = "0.6", features = ["cors", "fs", "set-header", "normali
 tower = "0.5"
 url = "2"
 zstd = "0.13"
+wiremock = "0.6"
 rstest = "0.26"
 
 [workspace.lints.rust]
