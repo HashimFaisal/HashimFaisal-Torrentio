@@ -4,7 +4,6 @@ use regex::Regex;
 
 static SEEDERS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"👤 ([0-9]+)").expect("valid regex"));
 static SIZE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"💾 ([0-9.]+ [A-Za-z0-9_]+)").expect("valid regex"));
-static PROVIDER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"⚙.* ([^ \n]+)").expect("valid regex"));
 
 pub fn extract_seeders(title: &str) -> u64 {
     SEEDERS.captures(title).and_then(|captures| captures[1].parse().ok()).unwrap_or(0)
