@@ -34,7 +34,13 @@ cargo run --release -p torrentio-addon
 
 `MONGODB_URI` and `REDIS_URL` are optional (no store cache / no rate limiting without them). `MONGODB_DATABASE` overrides
 the database of the Mongo cache collections, `HOST` the bind address (default `::`). `TORBOX_API_URL` and
-`HIGHWAY_API_BASE` override the provider API base urls.\n\n`DIRECT_STREAM_API_URL` optionally enables an HTTPS direct-source API adapter. Torrentio sends `GET` requests with `type` (`movie`, `series`, or `anime`) and `id` (IMDb or Kitsu identifier) query parameters. The endpoint must return JSON shaped as `{"streams":[{"name":"Provider\n1080p","title":"filename or release title","url":"https://cdn.example/video.m3u8","behaviorHints":{}}]}`. Only public HTTP(S) playback URLs are accepted; redirects are disabled, requests time out after 8 seconds, response bodies are limited to 1 MiB, and at most 20 candidates are returned.\n\nSet `DIRECT_STREAM_ONLY=true` to skip the torrent database completely and use only the configured direct-source API. Without a configured API this mode intentionally returns no streams. In mixed mode, direct HTTP streams are preferred, are not filtered by seeder counts, and use a 60-second cache lifetime; the existing torrent/debrid path remains as fallback. Only configure source APIs and media URLs you are authorized to use.\n\nThe Docker image is built from this directory: 
+`HIGHWAY_API_BASE` override the provider API base urls.
+
+`DIRECT_STREAM_API_URL` optionally enables an HTTPS direct-source API adapter. Torrentio sends `GET` requests with `type` (`movie`, `series`, or `anime`) and `id` (IMDb or Kitsu identifier) query parameters. The endpoint must return JSON shaped as `{"streams":[{"name":"Provider\n1080p","title":"filename or release title","url":"https://cdn.example/video.m3u8","behaviorHints":{}}]}`. Only public HTTP(S) playback URLs are accepted; redirects are disabled, requests time out after 8 seconds, response bodies are limited to 1 MiB, and at most 20 candidates are returned.
+
+Set `DIRECT_STREAM_ONLY=true` to skip the torrent database completely and use only the configured direct-source API. Without a configured API this mode intentionally returns no streams. In mixed mode, direct HTTP streams are preferred, are not filtered by seeder counts, and use a 60-second cache lifetime; the existing torrent/debrid path remains as fallback. Only configure source APIs and media URLs you are authorized to use.
+
+The Docker image is built from this directory: 
 `docker build -t torrentio-addon .`
 
 ## Logging
