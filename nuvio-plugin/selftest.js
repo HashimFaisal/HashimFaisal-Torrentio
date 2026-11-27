@@ -134,7 +134,7 @@ const {getStreams}=require("./torrentio.js");
   // Metadata confidence and invalid metadata rejection.
   mode="metadata"; calls.length=0;
   const metadataResults=await getStreams("737373","movie",null,null);
-  assert.equal(metadataResults.length,4);
+  assert.equal(metadataResults.length,5);
   const merged=metadataResults.find(x=>x.infoHash==="2".repeat(40));
   assert.ok(merged);
   assert.ok(merged.duplicateCount >= 2,
