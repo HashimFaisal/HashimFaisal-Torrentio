@@ -312,13 +312,16 @@ async function getStreams(tmdbId, mediaType, season, episode) {
     // threshold does not produce enough usable results. This costs at most
     // three index requests and avoids hiding viable torrents behind stale counts.
     var thresholds = [10, 5, 1];
-    var collected = [], seen = {};
+    var collected = [], seen = Object.create(null);
     for (var i = 0; i < thresholds.length; i++) {
       var rows = await queryIndex(imdbId, kind, season, episode, thresholds[i]);
       var batch = toStreams(rows, kind, season, episode);
       for (var j = 0; j < batch.length; j++) {
-        if (!seen[batch[j].infoHash]) {
-          seen[batch[j].infoHash] = true;
+        var hash = batch[j].infoHash;
+        if (seen[hash] !== undefined) {
+          collected[seen[hash]] = mergeSameHash(collected[seen[hash]], batch[j]);
+        } else {
+          seen[hash] = collected.length;
           collected.push(batch[j]);
         }
       }
