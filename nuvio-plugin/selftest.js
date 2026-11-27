@@ -15,7 +15,7 @@ global.fetch = async (url) => {
   }
   if (String(url).includes("movies-api.accel.li")) {
     const imdb = new URL(String(url)).searchParams.get("query_term");
-    const h = "7".repeat(40);
+    const h = (mode==="metadata" ? "2" : "7").repeat(40);
     return {ok:true,status:200,json:async()=>({status:"ok",data:{movies:[{
       imdb_code:imdb,title:"Provider Movie",title_long:"Provider Movie (2026)",
       torrents:[{hash:h,quality:"480p",type:"web",seeds:1,peers:40,size_bytes:700000000,
@@ -114,7 +114,7 @@ const {getStreams}=require("./torrentio.js");
   // Metadata confidence and invalid metadata rejection.
   mode="metadata"; calls.length=0;
   const metadataResults=await getStreams("737373","movie",null,null);
-  assert.equal(metadataResults.length,5);
+  assert.equal(metadataResults.length,4);
   const merged=metadataResults.find(x=>x.infoHash==="2".repeat(40));
   assert.ok(merged);
   assert.ok(merged.duplicateCount >= 2,
@@ -124,6 +124,7 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(merged.metadataConfidence,100,
     "merged duplicate should preserve the strongest metadata confidence");
   assert.ok(merged.alternateTitles.includes("Example.Release.1080p.BluRay.REPACK"));
+  assert.ok(merged.providers.includes("YTS"), "same BTIH returned by YTS and The RarBg must merge into one result with both provider labels");
   const base32Result=metadataResults.find(x=>x.infoHash==="0".repeat(40));
   assert.ok(base32Result,
     "Base32 BTIH infoHash and magnet should normalize to the same canonical hexadecimal hash");
