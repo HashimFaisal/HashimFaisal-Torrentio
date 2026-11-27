@@ -36,14 +36,43 @@ function cached(key, ttlMs, loader) {
 var TMDB_CACHE_MS = 6 * 60 * 60 * 1000;
 var INDEX_CACHE_MS = 90 * 1000;
 var PROVIDER_CACHE_MS = 2 * 60 * 1000;
+var PROVIDER_FAILURE_THRESHOLD = 3;
+var PROVIDER_COOLDOWN_MS = 60 * 1000;
 var providerHealth = Object.create(null);
+function providerState(name) {
+  return providerHealth[name] || (providerHealth[name] = {
+    requests: 0, successes: 0, failures: 0, results: 0, lastLatencyMs: 0,
+    averageLatencyMs: 0, consecutiveFailures: 0, circuitOpenUntil: 0,
+    lastError: "", lastErrorKind: "", lastSuccessAt: 0, lastFailureAt: 0
+  });
+}
+function classifyProviderError(error) {
+  var message = str(error && error.message ? error.message : error).toLowerCase();
+  var status = Number((message.match(/http\\s+(\\d{3})/) || [])[1] || 0);
+  if (status >= 400 && status < 500) return "provider-http-client-error";
+  if (status >= 500) return "provider-http-server-error";
+  if (/invalid .*response|malformed|unexpected.*json/.test(message)) return "malformed-index-response";
+  if (/timeout|timed out|abort/.test(message)) return "provider-timeout";
+  if (/fetch|network|connect|socket|dns/.test(message)) return "provider-network-error";
+  return "provider-error";
+}
 function recordProvider(name, startedAt, ok, detail) {
-  var state = providerHealth[name] || { requests: 0, successes: 0, failures: 0, results: 0, lastLatencyMs: 0, lastError: "" };
+  var state = providerState(name);
+  var latency = Math.max(0, Date.now() - startedAt);
   state.requests++;
-  state.lastLatencyMs = Math.max(0, Date.now() - startedAt);
-  if (ok) { state.successes++; state.results += detail || 0; state.lastError = ""; }
-  else { state.failures++; state.lastError = str(detail && detail.message ? detail.message : detail || "provider failed").slice(0, 180); }
-  providerHealth[name] = state;
+  state.lastLatencyMs = latency;
+  state.averageLatencyMs = state.averageLatencyMs ? Math.round(state.averageLatencyMs * 0.7 + latency * 0.3) : latency;
+  if (ok) {
+    state.successes++; state.results += detail || 0; state.lastError = "";
+    state.lastErrorKind = ""; state.consecutiveFailures = 0;
+    state.circuitOpenUntil = 0; state.lastSuccessAt = Date.now();
+  } else {
+    state.failures++; state.consecutiveFailures++;
+    state.lastError = str(detail && detail.message ? detail.message : detail || "provider failed").slice(0, 180);
+    state.lastErrorKind = classifyProviderError(detail);
+    state.lastFailureAt = Date.now();
+    if (state.consecutiveFailures >= PROVIDER_FAILURE_THRESHOLD) state.circuitOpenUntil = Date.now() + PROVIDER_COOLDOWN_MS;
+  }
 }
 
 function str(v) { return v === null || v === undefined ? "" : String(v); }
@@ -85,19 +114,43 @@ function exactEpisode(item, season, episode) {
 // Estimate swarm usability from supply, demand, file size and resolution.
 // Leechers are demand, not extra capacity: a crowded swarm must not outrank
 // an equally-sized healthy swarm merely because many clients are downloading.
-function weakNetworkScore(seeds, leechers, bytes, quality) {
+var NETWORK_PROFILES = {
+  weak: { movieMaxGiB: 4, episodeMaxGiB: 2.5, sizePenalty: 9, q2160: -18, q1080: -2, q720: 12, q480: 5 },
+  medium: { movieMaxGiB: 12, episodeMaxGiB: 6, sizePenalty: 5, q2160: -5, q1080: 10, q720: 7, q480: 2 },
+  fast: { movieMaxGiB: 30, episodeMaxGiB: 18, sizePenalty: 2, q2160: 13, q1080: 10, q720: 3, q480: -2 }
+};
+// This is a catalog-response heuristic, not a measurement of P2P throughput.
+function getNetworkProfile() {
+  var names = Object.keys(providerHealth), latencies = [], requests = 0, failures = 0;
+  names.forEach(function(name) {
+    var state = providerHealth[name];
+    if (state.requests) {
+      latencies.push(state.averageLatencyMs || state.lastLatencyMs);
+      requests += state.requests; failures += state.failures;
+    }
+  });
+  if (!latencies.length) return "medium";
+  var avg = latencies.reduce(function(a,b) { return a + b; }, 0) / latencies.length;
+  var failureRate = requests ? failures / requests : 0;
+  if (avg >= 1600 || failureRate >= 0.35) return "weak";
+  if (avg <= 500 && failureRate < 0.1) return "fast";
+  return "medium";
+}
+function weakNetworkScore(seeds, leechers, bytes, quality, profile) {
   var q = str(quality).toLowerCase();
-  var qualityBonus = /2160|4k|uhd/.test(q) ? -10 :
-    /1080/.test(q) ? 4 : /720/.test(q) ? 8 :
-    /480|sd/.test(q) ? 3 : 0;
+  var rules = NETWORK_PROFILES[profile] || NETWORK_PROFILES.medium;
+  var qualityBonus = /2160|4k|uhd/.test(q) ? rules.q2160 :
+    /1080/.test(q) ? rules.q1080 : /720/.test(q) ? rules.q720 :
+    /480|sd/.test(q) ? rules.q480 : 0;
   var sizeGiB = bytes / (1024 * 1024 * 1024);
   var ratio = (seeds + 1) / (leechers + 1);
   var ratioScore = Math.max(-12, Math.min(12, Math.log(ratio) / Math.LN2 * 5));
-  return Math.log(seeds + 1) * 10 +
-    ratioScore -
-    Math.log(leechers + 1) * 3 +
-    qualityBonus -
-    Math.log(sizeGiB + 1) * 6;
+  return Math.log(seeds + 1) * 10 + ratioScore - Math.log(leechers + 1) * 3 +
+    qualityBonus - Math.log(sizeGiB + 1) * rules.sizePenalty;
+}
+function recordDiagnostic(diagnostics, reason) {
+  if (!diagnostics) return;
+  diagnostics[reason] = (diagnostics[reason] || 0) + 1;
 }
 function swarmHealth(seeds, leechers) {
   if (seeds >= 8 && seeds >= leechers) return "healthy";
@@ -270,7 +323,7 @@ function mergeSameHash(existing, incoming) {
   return merged;
 }
 
-function toStreams(items, kind, season, episode) {
+function toStreams(items, kind, season, episode, diagnostics, profile) {
   var seen = Object.create(null), out = [];
   for (var i = 0; i < items.length; i++) {
     var item = items[i] || {};
@@ -281,19 +334,22 @@ function toStreams(items, kind, season, episode) {
     var seeds = Number(item.seeders);
     var leechers = item.leechers === undefined || item.leechers === null || item.leechers === "" ? 0 : Number(item.leechers);
     var bytes = Number(item.size);
-    if (!validHash(hash) || !magnetMatch ||
-        magnetHash !== hash ||
-        !validCount(seeds) || seeds < 1 ||
-        !validCount(leechers) ||
-        !isFinite(bytes) || bytes <= 0 ||
-        Math.floor(bytes) !== bytes || bytes > Number.MAX_SAFE_INTEGER) continue;
-    if (rejectedVerification(item.verifile)) continue;
-    if (kind !== "movie" && !exactEpisode(item, season, episode)) continue;
+    if (!validHash(hash)) { recordDiagnostic(diagnostics, "invalid-infohash"); continue; }
+    if (!magnetMatch) { recordDiagnostic(diagnostics, "invalid-or-missing-magnet"); continue; }
+    if (magnetHash !== hash) { recordDiagnostic(diagnostics, "magnet-infohash-mismatch"); continue; }
+    if (!validCount(seeds) || seeds < 1 || !validCount(leechers)) { recordDiagnostic(diagnostics, "missing-or-invalid-swarm-data"); continue; }
+    if (!isFinite(bytes) || bytes <= 0 || Math.floor(bytes) !== bytes || bytes > Number.MAX_SAFE_INTEGER) { recordDiagnostic(diagnostics, "missing-or-invalid-file-size"); continue; }
+    if (rejectedVerification(item.verifile)) { recordDiagnostic(diagnostics, "verification-failed"); continue; }
+    if (kind !== "movie" && !exactEpisode(item, season, episode)) { recordDiagnostic(diagnostics, "wrong-episode-or-pack"); continue; }
     // Discard clearly corrupt index sizes, rather than presenting multi-terabyte movie files.
-    if (kind === "movie" && bytes > 200 * 1024 * 1024 * 1024) continue;
-    if (kind !== "movie" && bytes > 1024 * 1024 * 1024 * 1024) continue;
+    if (kind === "movie" && bytes > 200 * 1024 * 1024 * 1024) { recordDiagnostic(diagnostics, "implausible-movie-size"); continue; }
+    if (kind !== "movie" && bytes > 1024 * 1024 * 1024 * 1024) { recordDiagnostic(diagnostics, "implausible-episode-size"); continue; }
     var metadata = releaseMetadata(item);
     var quality = metadata.quality;
+    var selectedProfile = profile || getNetworkProfile();
+    var profileRules = NETWORK_PROFILES[selectedProfile] || NETWORK_PROFILES.medium;
+    var maxGiB = kind === "movie" ? profileRules.movieMaxGiB : profileRules.episodeMaxGiB;
+    var networkFit = bytes <= maxGiB * 1024 * 1024 * 1024 ? "recommended-size" : "large-for-profile";
     var detail = [str(item.source), str(item.codec), str(item.hdr)].filter(Boolean).join(" · ");
     var score = Number(item.qualityScore || 0);
     var candidate = {
@@ -313,7 +369,9 @@ function toStreams(items, kind, season, episode) {
       codec: str(item.codec),
       hdr: str(item.hdr),
       qualityScore: score,
-      networkScore: weakNetworkScore(seeds, leechers, bytes, quality),
+      networkScore: weakNetworkScore(seeds, leechers, bytes, quality, selectedProfile),
+      networkProfile: selectedProfile,
+      networkFit: networkFit,
       swarmHealth: swarmHealth(seeds, leechers),
       metadataConfidence: metadata.confidence,
       metadataWarnings: metadata.warnings,
@@ -388,11 +446,11 @@ async function queryEztv(imdbId) {
     });
   });
 }
-async function queryRarbgAdaptive(imdbId, kind, season, episode) {
+async function queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, profile) {
   var thresholds = [10, 5, 1], collected = [], seen = Object.create(null);
   for (var i = 0; i < thresholds.length; i++) {
     var rows = await queryIndex(imdbId, kind, season, episode, thresholds[i]);
-    var batch = toStreams(rows, kind, season, episode);
+    var batch = toStreams(rows, kind, season, episode, diagnostics, profile);
     for (var j = 0; j < batch.length; j++) {
       var hash = batch[j].infoHash;
       if (seen[hash] !== undefined) collected[seen[hash]] = mergeSameHash(collected[seen[hash]], batch[j]);
@@ -421,6 +479,12 @@ function mergeProviderResults(groups) {
   return merged.slice(0, MAX_RESULTS);
 }
 async function runProvider(name, loader) {
+  var state = providerState(name);
+  if (state.circuitOpenUntil > Date.now()) {
+    console.warn("[Torrentio Local] provider skipped (cooldown) " + name + " until " + new Date(state.circuitOpenUntil).toISOString());
+    return [];
+  }
+  // Once the cooldown expires, one request is allowed as a half-open recovery probe.
   var started = Date.now();
   try {
     var streams = await loader();
@@ -428,7 +492,7 @@ async function runProvider(name, loader) {
     return streams;
   } catch (error) {
     recordProvider(name, started, false, error);
-    console.warn("[Torrentio Local] provider " + name + ": " + (error && error.message ? error.message : error));
+    console.warn("[Torrentio Local] provider " + name + " [" + providerState(name).lastErrorKind + "]: " + (error && error.message ? error.message : error));
     return [];
   }
 }
@@ -440,25 +504,32 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         (isNaN(Number(season)) || isNaN(Number(episode)) ||
          Number(season) < 0 || Number(episode) < 1)) return [];
     var imdbId = await imdbFor(tmdbId, kind === "movie" ? "movie" : "tv");
+    var diagnostics = Object.create(null);
+    var profile = getNetworkProfile();
     // Independent catalogs run concurrently; provider failures are isolated.
     var jobs = [runProvider("The RarBg", function() {
-      return queryRarbgAdaptive(imdbId, kind, season, episode);
+      return queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, profile);
     })];
     if (kind === "movie") {
       jobs.push(runProvider("YTS", async function() {
-        return toStreams(await queryYts(imdbId), "movie", season, episode);
+        return toStreams(await queryYts(imdbId), "movie", season, episode, diagnostics, profile);
       }));
     } else {
       jobs.push(runProvider("EZTV", async function() {
-        return toStreams(await queryEztv(imdbId), kind, season, episode);
+        return toStreams(await queryEztv(imdbId), kind, season, episode, diagnostics, profile);
       }));
     }
     var groups = await Promise.all(jobs);
     var combined = mergeProviderResults(groups);
-    console.info("[Torrentio Local] sources=" + groups.length + " results=" + combined.length +
+    var thin = combined.filter(function(item) { return item.swarmHealth === "thin"; }).length;
+    var large = combined.filter(function(item) { return item.networkFit === "large-for-profile"; }).length;
+    console.info("[Torrentio Local] profile=" + profile + " sources=" + groups.length + " results=" + combined.length +
+      " thinSwarms=" + thin + " largeForProfile=" + large + " rejected=" + JSON.stringify(diagnostics) +
       " health=" + Object.keys(providerHealth).map(function(name) {
         var state = providerHealth[name];
-        return name + ":" + state.successes + "/" + state.requests + "@" + state.lastLatencyMs + "ms";
+        return name + ":" + state.successes + "/" + state.requests + "@" + state.lastLatencyMs + "ms" +
+          (state.circuitOpenUntil > Date.now() ? ":cooldown" : "") +
+          (state.lastErrorKind ? ":" + state.lastErrorKind : "");
       }).join(","));
     return combined;
   } catch (err) {
