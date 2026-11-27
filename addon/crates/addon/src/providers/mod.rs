@@ -1,6 +1,5 @@
 mod alldebrid;
 mod debridlink;
-pub(crate) mod direct_sources;
 mod easydebrid;
 pub(crate) mod helper;
 mod highway;
