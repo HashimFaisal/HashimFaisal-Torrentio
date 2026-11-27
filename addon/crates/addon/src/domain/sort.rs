@@ -137,12 +137,11 @@ fn sort_by_quality(streams: Vec<Stream>, nested_by_size: bool) -> Vec<Stream> {
 }
 
 fn resolution_of(quality: &str) -> Option<u32> {
-    RESOLUTION.is_match(quality).then(|| leading_integer(quality)).flatten()
-}
-
-fn leading_integer(text: &str) -> Option<u32> {
-    let digits: String = text.chars().take_while(char::is_ascii_digit).collect();
-    digits.parse().ok().filter(|value| *value != 0)
+    let digits_len = quality.bytes().take_while(u8::is_ascii_digit).count();
+    if digits_len == 0 || !quality[digits_len..].contains('p') {
+        return None;
+    }
+    quality[..digits_len].parse().ok().filter(|value| *value != 0)
 }
 
 fn compare_qualities(a: &str, b: &str) -> Ordering {
@@ -200,6 +199,16 @@ mod tests {
         assert_eq!(extract_quality("Torrentio\n4k"), "2060p");
         assert_eq!(extract_quality("Torrentio\nBluRay"), Quality::Other.label());
         assert_eq!(extract_quality("Torrentio\nCAM"), Quality::Cam.label());
+    }
+
+    #[test]
+    fn resolution_parser_handles_numeric_buckets_without_allocating() {
+        assert_eq!(resolution_of("1080p"), Some(1080));
+        assert_eq!(resolution_of("4320p"), Some(4320));
+        assert_eq!(resolution_of("0p"), None);
+        assert_eq!(resolution_of("undefined"), None);
+        assert_eq!(resolution_of("1080foo720p"), Some(1080));
+        assert_eq!(resolution_of("foo1080p"), None);
     }
 
     #[test]
