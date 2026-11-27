@@ -720,5 +720,4 @@ mod tests {
 
         assert_eq!(to_streams(vec![first, second]).len(), 2);
     }
-
 }
