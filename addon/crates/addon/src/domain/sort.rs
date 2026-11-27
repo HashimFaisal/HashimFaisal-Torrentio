@@ -270,12 +270,7 @@ mod tests {
             stream("T\n720p", "lower\n👤 100"),
         ];
         let titles: Vec<String> = sort_streams(streams, &config).into_iter().map(|stream| stream.title).collect();
-        assert_eq!(titles, vec![
-            "many\n👤 40",
-            "tie-first\n👤 40",
-            "few\n👤 4",
-            "lower\n👤 100",
-        ]);
+        assert_eq!(titles, vec!["many\n👤 40", "tie-first\n👤 40", "few\n👤 4", "lower\n👤 100"]);
     }
 
     #[test]
