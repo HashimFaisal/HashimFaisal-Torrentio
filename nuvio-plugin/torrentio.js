@@ -186,6 +186,14 @@ function recordDiagnostic(diagnostics, reason) {
   if (!diagnostics) return;
   diagnostics[reason] = (diagnostics[reason] || 0) + 1;
 }
+function normalizedQualityScore(value) {
+  if (value === null || value === undefined || value === "") return { score: 0, valid: true };
+  var score = Number(value);
+  if (!isFinite(score) || Math.floor(score) !== score || score < 0 || score > 1000) {
+    return { score: 0, valid: false };
+  }
+  return { score: score, valid: true };
+}
 function swarmHealth(seeds, leechers) {
   if (seeds >= 8 && seeds >= leechers) return "healthy";
   if (seeds >= 3 && seeds * 2 >= leechers) return "contended";
@@ -418,7 +426,9 @@ function toStreams(items, kind, season, episode, diagnostics, profile) {
     var maxGiB = kind === "movie" ? profileRules.movieMaxGiB : profileRules.episodeMaxGiB;
     var networkFit = bytes <= maxGiB * 1024 * 1024 * 1024 ? "recommended-size" : "large-for-profile";
     var detail = [metadata.source, metadata.codec, metadata.hdr, metadata.audio].filter(Boolean).join(" · ");
-    var score = Number(item.qualityScore || 0);
+    var qualityScoreResult = normalizedQualityScore(item.qualityScore);
+    var score = qualityScoreResult.score;
+    if (!qualityScoreResult.valid) recordDiagnostic(diagnostics, "invalid-quality-score");
     var candidate = {
       title: str(item.name) || "Torrent release",
       name: (str(item.provider) || "The RarBg") + " · " + quality + " · " + seeds + " seeds" +
@@ -437,6 +447,7 @@ function toStreams(items, kind, season, episode, diagnostics, profile) {
       hdr: metadata.hdr,
       audio: metadata.audio,
       qualityScore: score,
+      qualityScoreWarnings: qualityScoreResult.valid ? [] : ["invalid-quality-score"],
       networkScore: weakNetworkScore(seeds, leechers, bytes, quality, selectedProfile),
       networkProfile: selectedProfile,
       networkFit: networkFit,
