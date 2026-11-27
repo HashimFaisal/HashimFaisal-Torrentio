@@ -29,7 +29,7 @@ macro_rules! entries_sql {
             r#"SELECT
     f."infoHash" AS f_info_hash, f."fileIndex" AS f_file_index, f."title" AS f_title, f."size" AS f_size,
     f."kitsuId" AS f_kitsu_id,
-    t."infoHash" AS t_info_hash, t."provider" AS t_provider, t."torrentId" AS t_torrent_id, t."title" AS t_title,
+    t."provider" AS t_provider, t."torrentId" AS t_torrent_id, t."title" AS t_title,
     t."size" AS t_size, t."type" AS t_type, t."uploadDate" AS t_upload_date, t."seeders" AS t_seeders,
     t."trackers" AS t_trackers, t."languages" AS t_languages, t."resolution" AS t_resolution
     FROM "files" AS f INNER JOIN "torrents" AS t ON f."infoHash" = t."infoHash"
@@ -104,13 +104,12 @@ struct RecordColumns {
     f_title: String,
     f_size: Option<i64>,
     f_kitsu_id: Option<i32>,
-    t_info_hash: Option<String>,
-    t_provider: Option<String>,
+    t_provider: String,
     t_torrent_id: Option<String>,
-    t_title: Option<String>,
+    t_title: String,
     t_size: Option<i64>,
-    t_type: Option<String>,
-    t_upload_date: Option<DateTime<Utc>>,
+    t_type: String,
+    t_upload_date: DateTime<Utc>,
     t_seeders: Option<i16>,
     t_trackers: Option<String>,
     t_languages: Option<String>,
@@ -118,28 +117,29 @@ struct RecordColumns {
 }
 
 impl RecordColumns {
-    fn into_record(self) -> Option<Record> {
+    fn into_record(self) -> Record {
+        let info_hash = self.f_info_hash;
         let torrent = TorrentColumns {
-            info_hash: self.t_info_hash?,
-            provider: self.t_provider?,
+            info_hash: info_hash.clone(),
+            provider: self.t_provider,
             torrent_id: self.t_torrent_id,
-            title: self.t_title?,
+            title: self.t_title,
             size: self.t_size,
-            kind: self.t_type?,
-            upload_date: self.t_upload_date?,
+            kind: self.t_type,
+            upload_date: self.t_upload_date,
             seeders: self.t_seeders,
             trackers: self.t_trackers,
             languages: self.t_languages,
             resolution: self.t_resolution,
         };
-        Some(Record {
-            info_hash: self.f_info_hash,
+        Record {
+            info_hash,
             file_index: self.f_file_index,
             title: self.f_title,
             size: self.f_size,
             kitsu_id: self.f_kitsu_id,
             torrent: torrent.into(),
-        })
+        }
     }
 }
 
@@ -196,7 +196,7 @@ impl Repository {
     }
 
     async fn entries(&self, query: Query<'_, RecordColumns>) -> Result<Vec<Record>> {
-        Ok(self.fetch_all(query).await?.into_iter().filter_map(RecordColumns::into_record).collect())
+        Ok(self.fetch_all(query).await?.into_iter().map(RecordColumns::into_record).collect())
     }
 }
 
