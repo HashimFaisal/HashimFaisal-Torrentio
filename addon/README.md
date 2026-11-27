@@ -36,7 +36,7 @@ cargo run --release -p torrentio-addon
 the database of the Mongo cache collections, `HOST` the bind address (default `::`). `TORBOX_API_URL` and
 `HIGHWAY_API_BASE` override the provider API base urls.
 
-Torrentio is torrent-first: stream results come from the configured torrent database and are handed to Stremio as torrent sources. The addon does not host media or provide HTTP/HLS playback sources.
+Torrentio is torrent-only: search results are read from the configured torrent index and returned to Stremio as torrent sources. The addon does not host media, scrape arbitrary playback URLs, or provide HTTP/HLS streams; playback is handled by Stremio or an explicitly configured Debrid provider.
 
 `DATABASE_URI` is required for torrent lookups. MongoDB and Redis remain optional and provide persistent caching and distributed rate limiting when configured.
 
