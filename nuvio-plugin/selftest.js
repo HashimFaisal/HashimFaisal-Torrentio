@@ -24,6 +24,7 @@ global.fetch = async (url) => {
   const rows = mode==="metadata" ? [
     {name:"Example.Release.1080p.BluRay",infoHash:hash("2"),magnet:"magnet:?xt=urn:btih:"+hash("2"),seeders:25,leechers:2,resolution:"1080p",size:2200000000,source:"BluRay",codec:"x265"},
     {name:"Example.Release.1080p.BluRay.REPACK",infoHash:hash("2"),magnet:"magnet:?xt=urn:btih:"+hash("2"),seeders:60,leechers:4,resolution:"1080p",size:2200000000},
+    {name:"Base32 hash release 720p",infoHash:"A".repeat(32),magnet:"magnet:?xt=urn:btih:"+"A".repeat(32),seeders:18,leechers:2,resolution:"720p",size:1200000000},
     {name:"Example.Release.720p.WEB",infoHash:hash("3"),magnet:"magnet:?xt=urn:btih:"+hash("3"),seeders:500,leechers:1,resolution:"2160p",size:900000000,source:"WEB",codec:"x264"},
     {name:"fractional swarm",infoHash:hash("4"),magnet:"magnet:?xt=urn:btih:"+hash("4"),seeders:3.5,leechers:1,resolution:"1080p",size:900000000},
     {name:"verification unavailable",infoHash:hash("5"),magnet:"magnet:?xt=urn:btih:"+hash("5"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"unknown"},
@@ -90,7 +91,7 @@ const {getStreams}=require("./torrentio.js");
   // Metadata confidence and invalid metadata rejection.
   mode="metadata"; calls.length=0;
   const metadataResults=await getStreams("737373","movie",null,null);
-  assert.equal(metadataResults.length,3);
+  assert.equal(metadataResults.length,4);
   const merged=metadataResults.find(x=>x.infoHash==="2".repeat(40));
   assert.ok(merged);
   assert.ok(merged.duplicateCount >= 2,
@@ -100,6 +101,9 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(merged.metadataConfidence,100,
     "merged duplicate should preserve the strongest metadata confidence");
   assert.ok(merged.alternateTitles.includes("Example.Release.1080p.BluRay.REPACK"));
+  const base32Result=metadataResults.find(x=>x.infoHash==="0".repeat(40));
+  assert.ok(base32Result,
+    "Base32 BTIH infoHash and magnet should normalize to the same canonical hexadecimal hash");
   const mismatch=metadataResults.find(x=>x.infoHash==="3".repeat(40));
   assert.ok(mismatch);
   assert.equal(mismatch.quality,"720p",
@@ -113,5 +117,5 @@ const {getStreams}=require("./torrentio.js");
   assert.ok(!metadataResults.some(x=>x.infoHash==="6".repeat(40)),
     "explicit failed verification must be rejected");
 
-  console.log("PASS: swarm ranking, magnet integrity, episode filtering, cache/coalescing, transient retry recovery, and permanent-error fast-fail.");
+  console.log("PASS: swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, transient retry recovery, and permanent-error fast-fail.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
