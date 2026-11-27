@@ -4,6 +4,7 @@ let mode = "movie";
 let transientFailures = 0;
 let forcedIndexStatus = 0;
 let forcedYtsStatus = 0;
+let forcedEztvStatus = 0;
 const calls = [];
 global.fetch = async (url) => {
   calls.push(String(url));
@@ -16,6 +17,9 @@ global.fetch = async (url) => {
   }
   if (String(url).includes("movies-api.accel.li") && forcedYtsStatus) {
     return {ok:false,status:forcedYtsStatus,headers:{get:()=>null},json:async()=>({})};
+  }
+  if (String(url).includes("eztvx.to/api/get-torrents") && forcedEztvStatus) {
+    return {ok:false,status:forcedEztvStatus,headers:{get:()=>null},json:async()=>({})};
   }
   if (String(url).includes("movies-api.accel.li")) {
     const imdb = new URL(String(url)).searchParams.get("query_term");
@@ -88,6 +92,15 @@ const {getStreams}=require("./torrentio.js");
   assert.ok(!r.some(x=>x.infoHash==="9".repeat(40)), "EZTV other episodes must be excluded");
   assert.match(calls[1],/season=1&episode=1/);
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
+
+  // Authentication failures should be classified and cooled down immediately.
+  forcedEztvStatus=403; calls.length=0;
+  await getStreams("747474","tv",1,1);
+  assert.equal(calls.filter(x=>x.includes("eztvx.to/api/get-torrents")).length,1);
+  forcedEztvStatus=0; calls.length=0;
+  await getStreams("757575","tv",1,1);
+  assert.equal(calls.filter(x=>x.includes("eztvx.to/api/get-torrents")).length,0,
+    "an endpoint with an authentication failure must be bypassed during its extended cooldown");
 
   // Repeating the same lookup should be served from the short-lived cache.
   const beforeRepeat = calls.length;
