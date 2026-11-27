@@ -33,11 +33,15 @@ impl DirectSources {
     pub(crate) fn from_env() -> Option<Self> {
         let raw = env::var("DIRECT_STREAM_API_URL").ok()?;
         let endpoint = match Url::parse(&raw) {
-            Ok(url) if url.scheme() == "https"
-                && url.host_str().is_some()
-                && url.username().is_empty()
-                && url.password().is_none()
-                && !is_non_public_host(url.host_str().unwrap_or_default()) => url,
+            Ok(url)
+                if url.scheme() == "https"
+                    && url.host_str().is_some()
+                    && url.username().is_empty()
+                    && url.password().is_none()
+                    && !is_non_public_host(url.host_str().unwrap_or_default()) =>
+            {
+                url
+            }
             Ok(_) => {
                 tracing::warn!("DIRECT_STREAM_API_URL must be an HTTPS URL without credentials");
                 return None;
@@ -62,17 +66,15 @@ impl DirectSources {
         Some(Self { endpoint, client })
     }
 
-    pub(crate) async fn resolve(
-        &self,
-        content_type: ContentType,
-        id: &str,
-    ) -> Result<Vec<Stream>> {
+    pub(crate) async fn resolve(&self, content_type: ContentType, id: &str) -> Result<Vec<Stream>> {
         let mut endpoint = self.endpoint.clone();
-        endpoint.query_pairs_mut()
-            .append_pair("type", content_type.as_str())
-            .append_pair("id", id);
+        endpoint.query_pairs_mut().append_pair("type", content_type.as_str()).append_pair("id", id);
 
-        let mut response = self.client.get(endpoint).send().await
+        let mut response = self
+            .client
+            .get(endpoint)
+            .send()
+            .await
             .context("direct source API request failed")?
             .error_for_status()
             .context("direct source API returned an unsuccessful status")?;
@@ -94,7 +96,9 @@ impl DirectSources {
 
         let allow_http = env::var("DIRECT_STREAM_ALLOW_HTTP")
             .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
-        let streams = payload.streams.into_iter()
+        let streams = payload
+            .streams
+            .into_iter()
             .filter_map(|stream| validate_stream(stream, allow_http))
             .take(20)
             .collect::<Vec<_>>();
@@ -126,11 +130,7 @@ fn validate_stream(mut stream: Stream, allow_http: bool) -> Option<Stream> {
 
 fn is_non_public_host(host: &str) -> bool {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
-    if host == "localhost"
-        || host.ends_with(".localhost")
-        || host.ends_with(".local")
-        || host.ends_with(".internal")
-    {
+    if host == "localhost" || host.ends_with(".localhost") || host.ends_with(".local") || host.ends_with(".internal") {
         return true;
     }
 
@@ -139,12 +139,19 @@ fn is_non_public_host(host: &str) -> bool {
     };
     match ip {
         std::net::IpAddr::V4(ip) => {
-            ip.is_private() || ip.is_loopback() || ip.is_link_local()
-                || ip.is_unspecified() || ip.is_broadcast() || ip.is_multicast()
+            ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_unspecified()
+                || ip.is_broadcast()
+                || ip.is_multicast()
         }
         std::net::IpAddr::V6(ip) => {
-            ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local()
-                || ip.is_unspecified() || ip.is_multicast()
+            ip.is_loopback()
+                || ip.is_unique_local()
+                || ip.is_unicast_link_local()
+                || ip.is_unspecified()
+                || ip.is_multicast()
         }
     }
 }
