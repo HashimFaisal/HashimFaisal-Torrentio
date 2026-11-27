@@ -188,6 +188,19 @@ fn counter(registry: &Registry, name: &str, help: &str, labels: &[&str]) -> Coun
     metric
 }
 
+fn register_pool_acquire_histogram(registry: &Registry) -> Histogram {
+    let metric = Histogram::with_opts(
+        HistogramOpts::new(
+            "db_pool_acquire_duration_seconds",
+            "Time spent acquiring a Postgres connection, including pool contention",
+        )
+        .buckets(DB_BUCKETS.to_vec()),
+    )
+    .expect("valid histogram");
+    registry.register(Box::new(metric.clone())).expect("unique metric");
+    metric
+}
+
 impl Metrics {
     pub fn new() -> Self {
         let registry = Registry::new_custom(None, Some([("app".to_owned(), "torrentio-addon".to_owned())].into()))
@@ -200,15 +213,7 @@ impl Metrics {
             GaugeVec::new(Opts::new("db_pool_connections", "Postgres connection pool state"), &["state"])
                 .expect("valid gauge");
         registry.register(Box::new(db_pool_connections.clone())).expect("unique metric");
-        let db_pool_acquire_duration = Histogram::with_opts(
-            HistogramOpts::new(
-                "db_pool_acquire_duration_seconds",
-                "Time spent acquiring a Postgres connection, including pool contention",
-            )
-            .buckets(DB_BUCKETS.to_vec()),
-        )
-        .expect("valid histogram");
-        registry.register(Box::new(db_pool_acquire_duration.clone())).expect("unique metric");
+        let db_pool_acquire_duration = register_pool_acquire_histogram(&registry);
         let memory_cache_bytes =
             GaugeVec::new(Opts::new("memory_cache_bytes", "Weighted size of the in-memory caches"), &["cache"])
                 .expect("valid gauge");
