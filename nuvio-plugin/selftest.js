@@ -10,6 +10,10 @@ let maxConcurrentIndexRequests = 0;
 const calls = [];
 global.fetch = async (url) => {
   calls.push(String(url));
+  if (String(url).includes("/search/?") && mode === "fallback-one-fails" &&
+      new URL(String(url)).searchParams.get("min_seeders") === "5") {
+    return {ok:false,status:400,headers:{get:()=>null},json:async()=>({})};
+  }
   if (String(url).includes("/search/?") && mode === "fallback-parallel") {
     activeIndexRequests++;
     maxConcurrentIndexRequests = Math.max(maxConcurrentIndexRequests, activeIndexRequests);
@@ -157,10 +161,21 @@ const {getStreams}=require("./torrentio.js");
   const recovered = await getStreams("525252","movie",null,null);
   assert.equal(recovered.length,4);
   const recoveredSearches = calls.filter(x=>x.includes("/search/?"));
-  assert.equal(recoveredSearches.length,5,
-    "two 503 retries plus the remaining adaptive thresholds should complete");
+  assert.ok(recoveredSearches.length >= 5,
+    "primary retries and both adaptive fallback tiers should complete");
+  assert.ok(recoveredSearches.some(x=>x.includes("min_seeders=5")));
+  assert.ok(recoveredSearches.some(x=>x.includes("min_seeders=1")));
   assert.equal(recoveredSearches[0],recoveredSearches[1]);
   assert.equal(recoveredSearches[1],recoveredSearches[2]);
+
+  // A failed fallback tier must not discard useful results from the other tier.
+  mode="fallback-one-fails"; calls.length=0;
+  const resilientFallback = await getStreams("787878","movie",null,null);
+  assert.ok(resilientFallback.length >= 2,
+    "successful 1-seeder fallback results must survive a failed 5-seeder tier");
+  assert.ok(resilientFallback.some(x=>x.infoHash==="6".repeat(40)));
+  assert.ok(calls.some(x=>x.includes("min_seeders=5")));
+  assert.ok(calls.some(x=>x.includes("min_seeders=1")));
 
   // Permanent malformed-request failures must not be retried; auth cooldown is tested at the end.
   calls.length=0; forcedIndexStatus=400;
