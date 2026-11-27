@@ -536,16 +536,19 @@ async function queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, pr
   // Keep the common path to one upstream request. If the high-seeder query is
   // sparse, fetch both fallback tiers together instead of waiting serially.
   var primary = await queryIndex(imdbId, kind, season, episode, 10);
-  var rows = [primary];
-  if (toStreams(primary, kind, season, episode, diagnostics, profile).length < 5) {
-    rows = rows.concat(await Promise.all([
+  var batches = [toStreams(primary, kind, season, episode, diagnostics, profile)];
+  if (batches[0].length < 5) {
+    var fallbackRows = await Promise.all([
       queryIndex(imdbId, kind, season, episode, 5),
       queryIndex(imdbId, kind, season, episode, 1)
-    ]));
+    ]);
+    for (var f = 0; f < fallbackRows.length; f++) {
+      batches.push(toStreams(fallbackRows[f], kind, season, episode, diagnostics, profile));
+    }
   }
   var collected = [], seen = Object.create(null);
-  for (var i = 0; i < rows.length; i++) {
-    var batch = toStreams(rows[i], kind, season, episode, diagnostics, profile);
+  for (var i = 0; i < batches.length; i++) {
+    var batch = batches[i];
     for (var j = 0; j < batch.length; j++) {
       var hash = batch[j].infoHash;
       if (seen[hash] !== undefined) collected[seen[hash]] = mergeSameHash(collected[seen[hash]], batch[j]);
