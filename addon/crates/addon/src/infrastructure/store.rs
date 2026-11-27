@@ -132,12 +132,16 @@ impl Store {
             .await?
             .try_collect()
             .await?;
-        let mut values: HashMap<String, T> = HashMap::with_capacity(stored.len());
-        for entry in stored {
-            if let Some(key) = entry.key {
-                values.insert(key, decode(entry.value).await?);
+        let mut values: HashMap<String, T> = tokio::task::spawn_blocking(move || {
+            let mut values = HashMap::with_capacity(stored.len());
+            for entry in stored {
+                if let Some(key) = entry.key {
+                    values.insert(key, decode_value(entry.value)?);
+                }
             }
-        }
+            Ok::<_, StoreError>(values)
+        })
+        .await??;
         Ok(keys.iter().map(|key| values.remove(key)).collect())
     }
 
@@ -207,13 +211,12 @@ impl Store {
 }
 
 async fn decode<T: DeserializeOwned + Send + 'static>(value: Bson) -> Result<T> {
+    tokio::task::spawn_blocking(move || decode_value(value)).await?
+}
+
+fn decode_value<T: DeserializeOwned>(value: Bson) -> Result<T> {
     match value {
-        Bson::Binary(binary) => {
-            tokio::task::spawn_blocking(move || -> Result<T> {
-                Ok(serde_json::from_slice(&zstd::decode_all(binary.bytes.as_slice())?)?)
-            })
-            .await?
-        }
+        Bson::Binary(binary) => Ok(serde_json::from_slice(&zstd::decode_all(binary.bytes.as_slice())?)?),
         other => Ok(bson::from_bson(other)?),
     }
 }
