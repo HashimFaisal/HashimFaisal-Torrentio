@@ -1,0 +1,88 @@
+name: Torrent Engine Manual Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL of the running Torrentio addon (without trailing slash)"
+        required: true
+        type: string
+      mode:
+        description: "hot = repeated warm-cache requests; cold = unique targets against a cold cache"
+        required: true
+        default: hot
+        type: choice
+        options:
+          - hot
+          - cold
+      targets:
+        description: "One '<type> <id>' pair per line; use representative IDs"
+        required: true
+        type: string
+      vus:
+        description: "Concurrent virtual users"
+        required: true
+        default: "64"
+        type: string
+      duration:
+        description: "Hot-mode duration (ignored in cold mode)"
+        required: true
+        default: "60s"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate inputs and prepare targets
+        env:
+          BASE: ${{ inputs.base_url }}
+          MODE: ${{ inputs.mode }}
+          TARGETS: ${{ inputs.targets }}
+          VUS: ${{ inputs.vus }}
+          DURATION: ${{ inputs.duration }}
+        run: |
+          set -eu
+          case "$BASE" in
+            http://*|https://*) ;;
+            *) echo "base_url must start with http:// or https://" >&2; exit 1 ;;
+          esac
+          case "$BASE" in */) BASE="${BASE%/}" ;; esac
+          case "$MODE" in hot|cold) ;; *) echo "Invalid mode" >&2; exit 1 ;; esac
+          case "$VUS" in ''|*[!0-9]*) echo "VUS must be a positive integer" >&2; exit 1 ;; esac
+          test "$VUS" -ge 1
+          printf '%s\n' "$TARGETS" | sed '/^[[:space:]]*$/d' > addon/bench/targets.txt
+          test -s addon/bench/targets.txt
+          awk 'NF != 2 { exit 1 } END { if (NR == 0) exit 1 }' addon/bench/targets.txt
+          if [ "$MODE" = hot ]; then
+            case "$DURATION" in *s|*m) ;; *) echo "DURATION must end in s or m" >&2; exit 1 ;; esac
+          fi
+          echo "BASE=$BASE" >> "$GITHUB_ENV"
+          echo "MODE=$MODE" >> "$GITHUB_ENV"
+          echo "VUS=$VUS" >> "$GITHUB_ENV"
+          echo "DURATION=$DURATION" >> "$GITHUB_ENV"
+
+      - name: Run k6 benchmark
+        run: |
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE/addon/bench:/work" \
+            --workdir /work \
+            -e BASE -e MODE -e VUS -e DURATION \
+            -e TARGETS=/work/targets.txt \
+            grafana/k6:0.54.0 run \
+            --summary-export=/work/summary.json load.js
+
+      - name: Upload benchmark summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: torrent-engine-benchmark-${{ github.run_id }}
+          path: addon/bench/summary.json
+          if-no-files-found: ignore
+          retention-days: 30
