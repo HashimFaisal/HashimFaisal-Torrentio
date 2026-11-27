@@ -3,20 +3,24 @@ import exec from 'k6/execution';
 import { check } from 'k6';
 import { SharedArray } from 'k6/data';
 
-const targets = new SharedArray('targets', () =>
-  open(__ENV.TARGETS).split(/\r?\n/).map(line => line.trim()).filter(Boolean),
-);
-const mode = __ENV.MODE;
-const vus = Number(__ENV.VUS || 64);
-
 if (!__ENV.BASE || !__ENV.TARGETS) {
   throw new Error('BASE and TARGETS are required');
 }
-if (!targets.length) {
-  throw new Error('TARGETS must contain at least one "<type> <id>" line');
-}
+
+const mode = __ENV.MODE;
+const vus = Number(__ENV.VUS || 64);
+const targets = new SharedArray('targets', () =>
+  open(__ENV.TARGETS).split(/\r?\n/).map(line => line.trim()).filter(Boolean),
+);
+
 if (mode !== 'hot' && mode !== 'cold') {
   throw new Error('MODE must be either "hot" or "cold"');
+}
+if (!Number.isInteger(vus) || vus < 1) {
+  throw new Error('VUS must be a positive integer');
+}
+if (!targets.length || targets.some(target => target.split(/\s+/).length !== 2)) {
+  throw new Error('TARGETS must contain one "<type> <id>" pair per non-empty line');
 }
 
 export const options = {
