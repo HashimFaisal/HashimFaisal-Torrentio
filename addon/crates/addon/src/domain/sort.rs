@@ -206,7 +206,7 @@ fn with_hdr_score(resolution: &str, has_hdr: bool) -> String {
     if has_hdr && resolution.ends_with("0p") {
         let mut scored = resolution.to_owned();
         let zero_index = scored.len() - 2;
-        scored.replace_range(zero_index..zero_index + 1, "1");
+        scored.replace_range(zero_index..=zero_index, "1");
         scored
     } else {
         resolution.to_owned()
