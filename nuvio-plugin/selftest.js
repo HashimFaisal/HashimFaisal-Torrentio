@@ -36,7 +36,7 @@ global.fetch = async (url) => {
        size_bytes:"1500000000",season:"1",episode:"2"}
     ]})};
   }
-  if (String(url).includes("/external_ids?"))
+  if (String(url).includes("/external_ids?")) {
     const imdbId = String(url).includes("/525252/") ? "tt525252" :
       String(url).includes("/626262/") ? "tt626262" :
       String(url).includes("/424242/") ? "tt424242" :
