@@ -150,7 +150,7 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(parallelFallback.length,7);
   assert.ok(maxConcurrentIndexRequests >= 2,
     "the 5-seeder and 1-seeder fallback requests must overlap rather than run serially");
-  assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\\d+)/)||[])[1])),[10,5,1]);
+  assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
 
   // Two transient 503 responses should recover on the third attempt.
   mode="movie"; calls.length=0; transientFailures=2;
