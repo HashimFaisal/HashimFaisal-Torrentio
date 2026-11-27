@@ -45,8 +45,8 @@ jobs:
 
       - name: Validate benchmark settings
         env:
-          VUS: ${{ inputs.vus }}
-          DURATION: ${{ inputs.duration }}
+          VUS: ${{ inputs.vus || '64' }}
+          DURATION: ${{ inputs.duration || '60s' }}
         run: |
           set -eu
           case "$VUS" in ''|*[!0-9]*) echo "VUS must be a positive integer" >&2; exit 1 ;; esac
