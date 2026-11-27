@@ -17,7 +17,7 @@ use crate::{
     infrastructure::flight::{Limiter, NamedQueue},
     infrastructure::magnet::enrich_stream_sources,
     infrastructure::ratelimit::{Budget, Caller, RateLimiter},
-    providers::{Mochs, static_videos::is_static_url},
+    providers::{Mochs, direct_sources::DirectSources, static_videos::is_static_url},
 };
 
 const CACHE_MAX_AGE_EMPTY: u32 = 60;
@@ -56,6 +56,7 @@ pub struct Addon {
     db_limiter: Limiter,
     rate_limiter: RateLimiter,
     cache_max_age: u32,
+    direct_sources: Option<DirectSources>,
 }
 
 impl Addon {
@@ -78,6 +79,7 @@ impl Addon {
             db_limiter: Limiter::new(DB_CONCURRENCY),
             rate_limiter,
             cache_max_age,
+            direct_sources: DirectSources::from_env(),
         }
     }
 
@@ -132,11 +134,42 @@ impl Addon {
         self.cache
             .wrap_stream(id, || async {
                 self.rate_limiter.charge(caller, Budget::Miss);
-                let records = self.db_limiter.run(self.records(content_type, id)).await?;
-                if records.is_empty() {
+                let direct_future = async {
+                    match &self.direct_sources {
+                        Some(provider) => provider.resolve(content_type, id).await,
+                        None => Ok(Vec::new()),
+                    }
+                };
+                let (records_result, direct_result) = tokio::join!(
+                    self.db_limiter.run(self.records(content_type, id)),
+                    direct_future
+                );
+
+                let mut streams = match direct_result {
+                    Ok(streams) => streams,
+                    Err(error) => {
+                        tracing::warn!(%error, "Direct HTTP source lookup failed; continuing with torrent sources");
+                        Vec::new()
+                    }
+                };
+
+                let torrent_streams = match records_result {
+                    Ok(records) => {
+                        tokio::task::spawn_blocking(move || to_streams(records))
+                            .await
+                            .map_err(HandlerError::failed)?
+                    }
+                    Err(error) if !streams.is_empty() => {
+                        tracing::warn!(%error, "Torrent database lookup failed; returning direct HTTP sources");
+                        Vec::new()
+                    }
+                    Err(error) => return Err(HandlerError::failed(error)),
+                };
+                streams.extend(torrent_streams);
+                if streams.is_empty() {
                     self.rate_limiter.charge(caller, Budget::Empty);
                 }
-                tokio::task::spawn_blocking(move || to_streams(records)).await.map_err(HandlerError::failed)
+                Ok(streams)
             })
             .await
     }
@@ -178,7 +211,6 @@ impl Addon {
         }
         Ok(Vec::new())
     }
-
     fn with_cache_params(&self, streams: Vec<Stream>) -> StreamsResponse {
         let cache_age = if streams.is_empty() {
             CACHE_MAX_AGE_EMPTY
@@ -357,8 +389,7 @@ mod tests {
                 info_hash: info_hash.to_owned(),
                 provider: "YTS".to_owned(),
                 torrent_id: None,
-                title: title.to_owned(),
-                size: Some(1_610_612_736),
+                title: title.to_owned(),                size: Some(1_610_612_736),
                 kind: "movie".to_owned(),
                 upload_date: Utc::now(),
                 seeders: Some(seeders),
@@ -537,8 +568,7 @@ mod tests {
     #[tokio::test]
     async fn surfaces_repository_failures_with_their_cause() {
         let harness = harness(FakeRepository { fail: true, ..FakeRepository::default() });
-        let error = harness.addon.streams("movie", "tt0000001", &config("")).await.unwrap_err();
-        assert!(error.to_string().contains("database is down"));
+        let error = harness.addon.streams("movie", "tt0000001", &config("")).await.unwrap_err();        assert!(error.to_string().contains("database is down"));
     }
 
     #[tokio::test]
