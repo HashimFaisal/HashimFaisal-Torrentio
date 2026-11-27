@@ -168,7 +168,9 @@ impl Store {
     }
 
     pub async fn set_packed(&self, key: &str, value: &Packed, ttl: Duration) -> Result<()> {
-        let binary = Binary { subtype: BinarySubtype::Generic, bytes: value.0.to_vec() };
+        let packed = Arc::clone(&value.0);
+        let bytes = tokio::task::spawn_blocking(move || packed.to_vec()).await?;
+        let binary = Binary { subtype: BinarySubtype::Generic, bytes };
         self.write(key, Bson::Binary(binary), ttl).await
     }
 
