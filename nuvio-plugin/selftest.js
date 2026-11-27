@@ -119,17 +119,6 @@ const {getStreams}=require("./torrentio.js");
     "HTTP 401 must fail fast while the independent YTS provider remains available");
   forcedIndexStatus=0;
 
-  // Three consecutive YTS outages open its circuit; a later lookup skips YTS during cooldown.
-  forcedYtsStatus=503; calls.length=0;
-  await getStreams("636363","movie",null,null);
-  await getStreams("646464","movie",null,null);
-  await getStreams("656565","movie",null,null);
-  calls.length=0;
-  await getStreams("676767","movie",null,null);
-  assert.equal(calls.filter(x=>x.includes("movies-api.accel.li")).length,0,
-    "a provider with repeated failures must be skipped during its cooldown");
-  forcedYtsStatus=0;
-
   // Metadata confidence and invalid metadata rejection.
   mode="metadata"; calls.length=0;
   const metadataResults=await getStreams("737373","movie",null,null);
@@ -159,6 +148,18 @@ const {getStreams}=require("./torrentio.js");
     "unknown verification state must not be mistaken for a failed verdict");
   assert.ok(!metadataResults.some(x=>x.infoHash==="6".repeat(40)),
     "explicit failed verification must be rejected");
+
+  // Three consecutive YTS outages open its circuit; a later lookup skips YTS during cooldown.
+  forcedYtsStatus=503; calls.length=0;
+  await getStreams("636363","movie",null,null);
+  await getStreams("646464","movie",null,null);
+  await getStreams("656565","movie",null,null);
+  calls.length=0;
+  await getStreams("676767","movie",null,null);
+  assert.equal(calls.filter(x=>x.includes("movies-api.accel.li")).length,0,
+    "a provider with repeated failures must be skipped during its cooldown");
+  forcedYtsStatus=0;
+
 
   console.log("PASS: multi-provider fan-out, provider isolation, cross-source deduplication, swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, retry recovery, and metadata validation.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
