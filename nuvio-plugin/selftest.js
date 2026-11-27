@@ -87,6 +87,7 @@ global.fetch = async (url) => {
       String(url).includes("/676767/") ? "tt676767" :
       String(url).includes("/686868/") ? "tt686868" :
       String(url).includes("/696969/") ? "tt696969" :
+      String(url).includes("/737373/") ? "tt737373" :
       String(url).includes("/747474/") ? "tt747474" :
       String(url).includes("/757575/") ? "tt757575" :
       String(url).includes("/787878/") ? "tt787878" :
