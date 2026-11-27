@@ -77,7 +77,9 @@ impl Addon {
         let direct_stream_only = std::env::var("DIRECT_STREAM_ONLY")
             .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
         if direct_stream_only && direct_sources.is_none() {
-            tracing::warn!("DIRECT_STREAM_ONLY is enabled but DIRECT_STREAM_API_URL is not configured; stream requests will return no direct sources");
+            tracing::warn!(
+                "DIRECT_STREAM_ONLY is enabled but DIRECT_STREAM_API_URL is not configured; stream requests will return no direct sources"
+            );
         }
         Self {
             repository,
@@ -155,10 +157,7 @@ impl Addon {
                     // In direct-only mode, do not query torrent records or consult swarm data.
                     (Ok(Vec::new()), direct_future.await)
                 } else {
-                    tokio::join!(
-                        self.db_limiter.run(self.records(content_type, id)),
-                        direct_future
-                    )
+                    tokio::join!(self.db_limiter.run(self.records(content_type, id)), direct_future)
                 };
 
                 let mut streams = match direct_result {
@@ -171,9 +170,7 @@ impl Addon {
 
                 let torrent_streams = match records_result {
                     Ok(records) => {
-                        tokio::task::spawn_blocking(move || to_streams(records))
-                            .await
-                            .map_err(HandlerError::failed)?
+                        tokio::task::spawn_blocking(move || to_streams(records)).await.map_err(HandlerError::failed)?
                     }
                     Err(error) if !streams.is_empty() => {
                         tracing::warn!(%error, "Torrent database lookup failed; returning direct HTTP sources");
