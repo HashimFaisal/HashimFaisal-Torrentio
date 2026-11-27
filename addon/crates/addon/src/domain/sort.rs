@@ -122,18 +122,27 @@ fn sort_by_size(streams: Vec<Stream>) -> Vec<Stream> {
 }
 
 fn sort_by_quality(streams: Vec<Stream>, nested_by_size: bool) -> Vec<Stream> {
-    let mut groups: Vec<(String, Vec<Stream>)> = Vec::new();
+    let mut groups: Vec<Vec<Stream>> = Vec::new();
     let mut group_indices: HashMap<String, usize> = HashMap::new();
     for stream in streams {
         let quality = extract_quality(&stream.name);
-        let index = *group_indices.entry(quality.clone()).or_insert_with(|| {
-            groups.push((quality, Vec::new()));
+        let index = *group_indices.entry(quality).or_insert_with(|| {
+            groups.push(Vec::new());
             groups.len() - 1
         });
-        groups[index].1.push(stream);
+        groups[index].push(stream);
     }
-    groups.sort_by(|(a, _), (b, _)| compare_qualities(a, b));
-    groups.into_iter().flat_map(|(_, members)| if nested_by_size { sort_by_size(members) } else { members }).collect()
+    let mut order: Vec<(String, usize)> = group_indices.into_iter().collect();
+    order.sort_by(|(a, a_index), (b, b_index)| {
+        compare_qualities(a, b).then_with(|| a_index.cmp(b_index))
+    });
+    order
+        .into_iter()
+        .flat_map(|(_, index)| {
+            let members = std::mem::take(&mut groups[index]);
+            if nested_by_size { sort_by_size(members) } else { members }
+        })
+        .collect()
 }
 
 fn resolution_of(quality: &str) -> Option<u32> {
