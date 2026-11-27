@@ -80,16 +80,17 @@ function swarmHealth(seeds, leechers) {
 // uncertain release as higher quality than its own title supports.
 function resolutionRank(value) {
   var q = str(value).toLowerCase();
-  if (/2160|4k|uhd/.test(q)) return 4;
-  if (/1440|2k/.test(q)) return 3;
+  if (/2160|4k|uhd/.test(q)) return 5;
+  if (/1440|2k/.test(q)) return 4;
   if (/1080/.test(q)) return 3;
   if (/720/.test(q)) return 2;
   if (/480|sd/.test(q)) return 1;
   return 0;
 }
 function resolutionLabel(rank) {
-  return rank >= 4 ? "2160p" : rank === 3 ? "1080p" :
-    rank === 2 ? "720p" : rank === 1 ? "480p" : "Unknown";
+  return rank >= 5 ? "2160p" : rank === 4 ? "1440p" :
+    rank === 3 ? "1080p" : rank === 2 ? "720p" :
+    rank === 1 ? "480p" : "Unknown";
 }
 function releaseMetadata(item) {
   var title = str(item.name);
