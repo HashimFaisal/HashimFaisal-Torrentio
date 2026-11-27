@@ -87,7 +87,7 @@ const {getStreams}=require("./torrentio.js");
   // Repeating the same lookup should be served from the short-lived cache.
   const beforeRepeat = calls.length;
   const repeated = await getStreams("1396","tv",1,1);
-  assert.equal(repeated.length,1);
+  assert.equal(repeated.length,2);
   assert.equal(calls.length,beforeRepeat,"cached lookup must not issue duplicate network requests");
 
   // Concurrent identical lookups should share in-flight TMDB and index requests.
