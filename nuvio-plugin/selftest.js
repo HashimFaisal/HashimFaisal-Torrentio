@@ -64,6 +64,7 @@ global.fetch = async (url) => {
     {name:"fractional swarm",infoHash:hash("4"),magnet:"magnet:?xt=urn:btih:"+hash("4"),seeders:3.5,leechers:1,resolution:"1080p",size:900000000},
     {name:"verification unavailable",infoHash:hash("5"),magnet:"magnet:?xt=urn:btih:"+hash("5"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"unknown"},
     {name:"invalid quality score",infoHash:hash("7"),magnet:"magnet:?xt=urn:btih:"+hash("7"),seeders:15,leechers:1,resolution:"1080p",size:900000000,qualityScore:"NaN"},
+    {name:"duplicate with valid score",infoHash:hash("7"),magnet:"magnet:?xt=urn:btih:"+hash("7"),seeders:18,leechers:1,resolution:"1080p",size:900000000,qualityScore:12},
     {name:"failed verification",infoHash:hash("6"),magnet:"magnet:?xt=urn:btih:"+hash("6"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"failed"}
   ] : mode==="movie" ? [
     {name:"Inception 2160p",infoHash:hash("a"),magnet:"magnet:?xt=urn:btih:"+hash("a"),seeders:80,leechers:80,resolution:"2160p",size:1000000000},
@@ -168,6 +169,10 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(invalidScore.qualityScore,0, "malformed quality scores must normalize to zero");
   assert.ok(invalidScore.qualityScoreWarnings.includes("invalid-quality-score"),
     "malformed quality scores must be visible in diagnostics");
+  assert.equal(invalidScore.qualityScore,12,
+    "a valid duplicate quality score may improve the merged optional score");
+  assert.ok(invalidScore.qualityScoreWarnings.includes("invalid-quality-score"),
+    "merging a valid duplicate must not erase the malformed-score diagnostic");
   assert.ok(!metadataResults.some(x=>x.infoHash==="6".repeat(40)),
     "explicit failed verification must be rejected");
 
