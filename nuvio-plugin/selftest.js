@@ -1,9 +1,18 @@
 const assert = require("node:assert/strict");
 global.TMDB_API_KEY = "test-key";
 let mode = "movie";
+let transientFailures = 0;
+let forcedIndexStatus = 0;
 const calls = [];
 global.fetch = async (url) => {
   calls.push(String(url));
+  if (String(url).includes("/search/?") && forcedIndexStatus) {
+    return {ok:false,status:forcedIndexStatus,json:async()=>({})};
+  }
+  if (String(url).includes("/search/?") && transientFailures > 0) {
+    transientFailures--;
+    return {ok:false,status:503,headers:{get:()=>null},json:async()=>({})};
+  }
   if (String(url).includes("/external_ids?")) {
     return {ok:true,status:200,json:async()=>({imdb_id:mode==="movie"?"tt1375666":mode==="tv"?"tt0903747":"tt1234567"})};
   }
@@ -48,5 +57,24 @@ const {getStreams}=require("./torrentio.js");
   ]);
   assert.equal(calls.length-beforeConcurrent,4,
     "two simultaneous lookups should share one TMDB request and three index requests");
-  console.log("PASS: swarm-aware ranking, magnet integrity, exact episode filtering, TTL cache, and concurrent request coalescing.");
+
+  // Two transient 503 responses should recover on the third attempt.
+  mode="movie"; calls.length=0; transientFailures=2;
+  const recovered = await getStreams("525252","movie",null,null);
+  assert.equal(recovered.length,3);
+  const recoveredSearches = calls.filter(x=>x.includes("/search/?"));
+  assert.equal(recoveredSearches.length,5,
+    "two 503 retries plus the remaining adaptive thresholds should complete");
+  assert.equal(recoveredSearches[0],recoveredSearches[1]);
+  assert.equal(recoveredSearches[1],recoveredSearches[2]);
+
+  // Permanent authentication failures must not be retried.
+  calls.length=0; forcedIndexStatus=401;
+  const unauthorized = await getStreams("626262","movie",null,null);
+  assert.equal(unauthorized.length,0);
+  assert.equal(calls.filter(x=>x.includes("/search/?")).length,1,
+    "HTTP 401 must fail fast without retrying");
+  forcedIndexStatus=0;
+
+  console.log("PASS: swarm ranking, magnet integrity, episode filtering, cache/coalescing, transient retry recovery, and permanent-error fast-fail.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
