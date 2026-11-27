@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::{Arc, LazyLock};
 
 use regex::Regex;
@@ -223,7 +224,16 @@ fn to_streams(mut records: Vec<Record>) -> Vec<Stream> {
         let seeders = |record: &Record| i64::from(record.torrent.seeders.unwrap_or(0));
         seeders(b).cmp(&seeders(a)).then_with(|| b.torrent.upload_date.cmp(&a.torrent.upload_date))
     });
-    records.iter().map(to_stream_info).collect()
+
+    let mut seen = HashSet::with_capacity(records.len());
+    records
+        .into_iter()
+        .filter(|record| {
+            let info_hash = record.info_hash.trim();
+            info_hash.is_empty() || seen.insert((info_hash.to_ascii_lowercase(), record.file_index))
+        })
+        .map(|record| to_stream_info(&record))
+        .collect()
 }
 
 #[cfg(test)]
@@ -677,4 +687,38 @@ mod tests {
         assert!(matches!(harness.addon.meta("torbox:denied", &config).await, Err(HandlerError::NotFound)));
         assert_eq!(harness.addon.mochs().blacklist_size(), 0);
     }
+    #[test]
+    fn deduplicates_same_hash_and_file_index_after_preferring_better_seeders() {
+        let mut weaker = record("abc", "Movie.2020.720p.WEB-DL.x264-GRP", 5);
+        weaker.file_index = Some(2);
+        let mut stronger = record("ABC", "Movie.2020.1080p.BluRay.x264-GRP", 40);
+        stronger.file_index = Some(2);
+
+        let streams = to_streams(vec![weaker, stronger]);
+        assert_eq!(streams.len(), 1);
+        assert!(streams[0].title.contains("👤 40"));
+    }
+
+    #[test]
+    fn keeps_different_files_from_the_same_torrent() {
+        let mut first = record("abc", "Show.S01E01.1080p.WEB-DL", 20);
+        first.file_index = Some(1);
+        let mut second = record("ABC", "Show.S01E02.1080p.WEB-DL", 20);
+        second.file_index = Some(2);
+
+        let streams = to_streams(vec![first, second]);
+        assert_eq!(streams.len(), 2);
+        assert_eq!(streams.iter().map(|stream| stream.file_idx).collect::<Vec<_>>(), [Some(1), Some(2)]);
+    }
+
+    #[test]
+    fn does_not_deduplicate_records_without_an_info_hash() {
+        let mut first = record("", "Movie.2020.720p.WEB-DL.x264-GRP", 10);
+        first.file_index = Some(0);
+        let mut second = first.clone();
+        second.title = "Movie.2020.1080p.BluRay.x264-GRP".to_owned();
+
+        assert_eq!(to_streams(vec![first, second]).len(), 2);
+    }
+
 }
