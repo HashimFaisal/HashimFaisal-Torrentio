@@ -74,6 +74,51 @@ function swarmHealth(seeds, leechers) {
   if (seeds >= 3 && seeds * 2 >= leechers) return "contended";
   return "thin";
 }
+// Idempotent GET recovery for temporary upstream/network failures.
+// Bounded retries prevent request storms and permanent 4xx responses fail fast.
+var REQUEST_MAX_ATTEMPTS = 3;
+function waitMs(ms) {
+  return new Promise(function(resolve) { setTimeout(resolve, ms); });
+}
+function retryDelay(response, attempt) {
+  var retryAfter = 0;
+  try {
+    var raw = response && response.headers && response.headers.get("Retry-After");
+    if (raw && /^\d+(?:\.\d+)?$/.test(raw)) retryAfter = Number(raw) * 1000;
+  } catch (_) {}
+  return Math.min(2000, Math.max(250 * Math.pow(2, attempt), retryAfter));
+}
+async function requestJson(url, service) {
+  var lastError;
+  for (var attempt = 0; attempt < REQUEST_MAX_ATTEMPTS; attempt++) {
+    var response;
+    try {
+      response = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!response.ok) {
+        var statusError = new Error(service + " HTTP " + response.status);
+        var retryable = response.status === 408 || response.status === 429 ||
+          response.status === 500 || response.status === 502 ||
+          response.status === 503 || response.status === 504;
+        if (!retryable || attempt === REQUEST_MAX_ATTEMPTS - 1) throw statusError;
+        lastError = statusError;
+        await waitMs(retryDelay(response, attempt));
+        continue;
+      }
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (response && !response.ok && !(
+        response.status === 408 || response.status === 429 ||
+        response.status === 500 || response.status === 502 ||
+        response.status === 503 || response.status === 504
+      )) throw error;
+      if (attempt === REQUEST_MAX_ATTEMPTS - 1) throw error;
+      await waitMs(250 * Math.pow(2, attempt));
+    }
+  }
+  throw lastError || new Error(service + " request failed");
+}
+
 async function imdbFor(tmdbId, mediaType) {
   var key = typeof TMDB_API_KEY !== "undefined" ? TMDB_API_KEY : "";
   if (!key) throw new Error("Nuvio TMDB key unavailable");
@@ -83,9 +128,7 @@ async function imdbFor(tmdbId, mediaType) {
   return cached("tmdb:" + kind + ":" + id, TMDB_CACHE_MS, async function() {
     var url = TMDB_BASE + "/" + kind + "/" + encodeURIComponent(id) +
       "/external_ids?api_key=" + encodeURIComponent(key);
-    var res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error("TMDB HTTP " + res.status);
-    var body = await res.json();
+    var body = await requestJson(url, "TMDB");
     if (!body || !/^tt\d+$/.test(str(body.imdb_id))) throw new Error("IMDb id not found");
     return body.imdb_id;
   });
@@ -100,11 +143,7 @@ async function queryIndex(imdbId, kind, season, episode, minSeeders) {
     (kind === "movie" ? "movie" : String(season) + ":" + String(episode)) +
     ":seeders:" + String(minSeeders);
   return cached(cacheKey, INDEX_CACHE_MS, async function() {
-    var res = await fetch(INDEX_BASE + "/search/?" + params, {
-      headers: { Accept: "application/json" }
-    });
-    if (!res.ok) throw new Error("The RarBg HTTP " + res.status);
-    var data = await res.json();
+    var data = await requestJson(INDEX_BASE + "/search/?" + params, "The RarBg");
     if (!data || !Array.isArray(data.results)) throw new Error("Invalid index response");
     return data.results;
   });
