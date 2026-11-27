@@ -18,6 +18,7 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 - Adaptive swarm search: tries 10 seeders first, then falls back to 5 and 1 only when fewer than five usable results are found.
 - Rejects multi-episode ranges and season packs to avoid starting the wrong file.
 - Computes a swarm-health score using seed supply, leecher demand, seed/leecher ratio, file size, and resolution. Leecher count is treated as demand/competition, not as extra capacity.
+- Caches TMDB-to-IMDb mappings for up to 6 hours and index responses for 90 seconds; concurrent identical requests share one in-flight request. The bounded cache avoids repeated lookups while keeping swarm data fresh.
 - Labels each result's swarm as healthy, contended, or thin for diagnostics.
 - Prefers manageable releases on constrained connections when their swarm health is competitive. This is a source-selection heuristic, not a guarantee of playback speed or a measurement of actual throughput.
 - Nuvio's built-in P2P engine handles playback. This plugin does not host, proxy, or download media.
@@ -31,7 +32,7 @@ node --check torrentio.js
 node selftest.js
 ```
 
-The self-test covers adaptive search, movie lookup, exact episode filtering, season-pack rejection, swarm-aware ordering, and magnet/info-hash integrity.
+The self-test covers adaptive search, movie lookup, exact episode filtering, season-pack rejection, swarm-aware ordering, magnet/info-hash integrity, short-lived caching, and concurrent request coalescing.
 
 ## Source and limitations
 
