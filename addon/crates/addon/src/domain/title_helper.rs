@@ -15,7 +15,11 @@ pub fn extract_size(title: &str) -> u64 {
 }
 
 pub fn extract_provider(title: &str) -> Option<&str> {
-    PROVIDER.captures(title).and_then(|captures| captures.get(1)).map(|found| found.as_str())
+    title.split('\n').find_map(|line| {
+        let marker = line.find('⚙')?;
+        let (_, provider) = line[marker..].rsplit_once(' ')?;
+        (!provider.is_empty()).then_some(provider)
+    })
 }
 
 pub fn parse_size(text: &str) -> u64 {
@@ -70,6 +74,9 @@ mod tests {
     fn extracts_provider() {
         assert_eq!(extract_provider(TITLE), Some("ThePirateBay"));
         assert_eq!(extract_provider("none"), None);
+        assert_eq!(extract_provider("⚙️ first provider\n⚙️ second-provider"), Some("second-provider"));
+        assert_eq!(extract_provider("⚙️ provider with suffix"), Some("suffix"));
+        assert_eq!(extract_provider("⚙️"), None);
     }
 
     #[test]
