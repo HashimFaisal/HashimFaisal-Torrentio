@@ -199,8 +199,8 @@ const {getStreams}=require("./torrentio.js");
   const unauthorized = await getStreams("626262","movie",null,null);
   assert.ok(unauthorized.some(x=>x.infoHash==="7".repeat(40)),
     "YTS results must survive a permanent The RarBg authentication failure");
-  assert.equal(calls.filter(x=>x.includes("/search/?")).length,1,
-    "HTTP 400 must fail fast while the independent YTS provider remains available");
+  assert.equal(calls.filter(x=>x.includes("/search/?")).length,3,
+    "each of the three concurrent tiers must fail fast once while the independent YTS provider remains available");
   forcedIndexStatus=0;
 
   // Metadata confidence and invalid metadata rejection.
