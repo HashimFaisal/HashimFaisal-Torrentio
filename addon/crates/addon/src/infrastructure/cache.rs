@@ -1,4 +1,4 @@
-use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
+use std::{collections::HashMap, future::Future, mem::size_of, sync::Arc, time::Duration};
 
 use moka::{Expiry, future::Cache as Moka};
 use mongodb::bson::DateTime;
@@ -40,6 +40,55 @@ struct Timed<T> {
     ttl: Duration,
 }
 
+#[derive(Clone)]
+struct StreamEntry {
+    packed: Packed,
+    decoded: Arc<Vec<Stream>>,
+}
+
+fn optional_string_bytes(value: Option<&String>) -> usize {
+    value.map_or(0, String::capacity)
+}
+
+fn json_heap_bytes(value: &Value) -> usize {
+    match value {
+        Value::String(value) => value.capacity(),
+        Value::Array(values) => {
+            values.capacity() * size_of::<Value>() + values.iter().map(json_heap_bytes).sum::<usize>()
+        }
+        Value::Object(values) => values
+            .iter()
+            .map(|(key, value)| size_of::<(String, Value)>() + key.capacity() + json_heap_bytes(value))
+            .sum(),
+        _ => 0,
+    }
+}
+
+fn decoded_stream_bytes(streams: &[Stream]) -> usize {
+    size_of::<Stream>() * streams.capacity()
+        + streams
+            .iter()
+            .map(|stream| {
+                stream.name.capacity()
+                    + stream.title.capacity()
+                    + optional_string_bytes(stream.info_hash.as_ref())
+                    + optional_string_bytes(stream.url.as_ref())
+                    + stream.sources.as_ref().map_or(0, |sources| {
+                        size_of::<String>() * sources.capacity()
+                            + sources.iter().map(String::capacity).sum::<usize>()
+                    })
+                    + stream.behavior_hints.as_ref().map_or(0, |hints| {
+                        optional_string_bytes(hints.binge_group.as_ref())
+                            + optional_string_bytes(hints.filename.as_ref())
+                            + optional_string_bytes(hints.video_hash.as_ref())
+                            + hints.extra.iter().map(|(key, value)| {
+                                size_of::<(String, Value)>() + key.capacity() + json_heap_bytes(value)
+                            }).sum::<usize>()
+                    })
+            })
+            .sum::<usize>()
+}
+
 struct PerEntryTtl;
 
 impl<K, T> Expiry<K, Timed<T>> for PerEntryTtl {
@@ -55,7 +104,7 @@ pub struct Stores {
 
 pub struct Cache {
     metrics: Metrics,
-    streams: Moka<String, Timed<Packed>>,
+    streams: Moka<String, Timed<StreamEntry>>,
     resolved: Moka<String, Timed<Resolved>>,
     stores: Stores,
     tasks: TaskTracker,
@@ -76,7 +125,10 @@ impl Cache {
             metrics,
             streams: Moka::<String, Timed<Packed>>::builder()
                 .max_capacity(stream_bytes)
-                .weigher(|key, entry| u32::try_from(key.len() + entry.value.len()).unwrap_or(u32::MAX))
+                .weigher(|key, entry| {
+                    let weight = key.len() + entry.value.packed.len() + decoded_stream_bytes(&entry.value.decoded);
+                    u32::try_from(weight).unwrap_or(u32::MAX)
+                })
                 .expire_after(PerEntryTtl)
                 .build(),
             resolved: Moka::builder().max_capacity(RESOLVED_LRU_SIZE).expire_after(PerEntryTtl).build(),
@@ -146,17 +198,8 @@ impl Cache {
     pub async fn streams_in_memory(&self, id: &str) -> Option<Arc<Vec<Stream>>> {
         let key = stream_key(id);
         let found = self.streams.get(&key).await?;
-        match found.value.decode::<Vec<Stream>>() {
-            Ok(streams) => {
-                self.metrics.cache_result("stream", "memory");
-                Some(Arc::new(streams))
-            }
-            Err(error) => {
-                tracing::warn!(key, %error, "Failed to decode cached streams");
-                self.streams.invalidate(&key).await;
-                None
-            }
-        }
+        self.metrics.cache_result("stream", "memory");
+        Some(Arc::clone(&found.value.decoded))
     }
 
     pub async fn wrap_stream<E, Fut>(&self, id: &str, method: impl FnOnce() -> Fut) -> Result<Arc<Vec<Stream>>, E>
@@ -172,8 +215,9 @@ impl Cache {
                 && let Ok(streams) = packed.decode::<Vec<Stream>>()
             {
                 self.metrics.cache_result("stream", "store");
-                self.remember_streams(key, packed, streams.is_empty()).await;
-                return Ok(Arc::new(streams));
+                let streams = Arc::new(streams);
+                self.remember_streams(key, packed, Arc::clone(&streams), streams.is_empty()).await;
+                return Ok(streams);
             }
         }
         self.metrics.cache_result("stream", "miss");
@@ -189,16 +233,16 @@ impl Cache {
                         log_write_error(&store_key, store.set_packed(&store_key, &value, ttl).await);
                     });
                 }
-                self.remember_streams(key, packed, streams.is_empty()).await;
+                self.remember_streams(key, packed, Arc::clone(&streams), streams.is_empty()).await;
             }
             Err(error) => tracing::warn!(key, %error, "Failed to encode streams for the cache"),
         }
         Ok(streams)
     }
 
-    async fn remember_streams(&self, key: String, packed: Packed, empty: bool) {
+    async fn remember_streams(&self, key: String, packed: Packed, decoded: Arc<Vec<Stream>>, empty: bool) {
         let ttl = if empty { STREAM_EMPTY_TTL } else { STREAM_MEM_TTL };
-        self.streams.insert(key, Timed { value: packed, ttl }).await;
+        self.streams.insert(key, Timed { value: StreamEntry { packed, decoded }, ttl }).await;
     }
 
     pub async fn wrap_resolved_url<E>(
