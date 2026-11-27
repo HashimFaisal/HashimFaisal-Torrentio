@@ -17,6 +17,7 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 - Adaptive swarm search: tries 10 seeders first, then falls back to 5 and 1 only when fewer than five usable results are found.
 - Rejects multi-episode ranges and season packs to avoid starting the wrong file.
 - Returns quality, size, seeders, peers and info hash.
+- Ranks results with a constrained-network heuristic that balances swarm health, file size and resolution; 720p/1080p-sized releases can rank ahead of very large 4K files when the swarm is comparable. This is a source-selection heuristic, not a guarantee of playback speed.
 - Nuvio's built-in P2P engine handles playback. This plugin does not host, proxy, or download media.
 
 ## Local tests
