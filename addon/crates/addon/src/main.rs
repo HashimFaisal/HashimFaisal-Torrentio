@@ -9,9 +9,7 @@ use addon::{
     application::Addon,
     domain::TorrentRepository,
     http::{AppState, app},
-    infrastructure::{
-        Budgets, Cache, Metrics, RateLimiter, Repository, Stores, init_best_trackers, logging, store,
-    },
+    infrastructure::{Budgets, Cache, Metrics, RateLimiter, Repository, Stores, init_best_trackers, logging, store},
     providers::{Context, Endpoints, Mochs, default_providers},
 };
 use anyhow::Context as _;
