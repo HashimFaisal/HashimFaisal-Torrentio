@@ -145,7 +145,7 @@ fn sort_by_quality(streams: Vec<Stream>, nested_by_size: bool) -> Vec<Stream> {
 
 fn resolution_of(quality: &str) -> Option<u32> {
     let digits_len = quality.bytes().take_while(u8::is_ascii_digit).count();
-    if digits_len == 0 || !quality.as_bytes().windows(2).any(|pair| pair[0].is_ascii_digit() && pair[1] == b'p') {
+    if digits_len == 0 || quality.as_bytes().get(digits_len) != Some(&b'p') || digits_len + 1 != quality.len() {
         return None;
     }
     quality[..digits_len].parse().ok().filter(|value| *value != 0)
@@ -244,7 +244,8 @@ mod tests {
         assert_eq!(resolution_of("4320p"), Some(4320));
         assert_eq!(resolution_of("0p"), None);
         assert_eq!(resolution_of("undefined"), None);
-        assert_eq!(resolution_of("1080foo720p"), Some(1080));
+        assert_eq!(resolution_of("1080foo720p"), None);
+        assert_eq!(resolution_of("1080p-extra"), None);
         assert_eq!(resolution_of("foo1080p"), None);
         assert_eq!(resolution_of("1080foo p"), None);
     }
