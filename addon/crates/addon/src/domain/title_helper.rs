@@ -1,16 +1,25 @@
-use std::{borrow::Cow, sync::LazyLock};
-
-use regex::Regex;
-
-static SEEDERS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"👤 ([0-9]+)").expect("valid regex"));
-static SIZE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"💾 ([0-9.]+ [A-Za-z0-9_]+)").expect("valid regex"));
+use std::borrow::Cow;
 
 pub fn extract_seeders(title: &str) -> u64 {
-    SEEDERS.captures(title).and_then(|captures| captures[1].parse().ok()).unwrap_or(0)
+    title.match_indices("👤 ").find_map(|(index, marker)| {
+        let start = index + marker.len();
+        let digits = title[start..].bytes().take_while(u8::is_ascii_digit).count();
+        (digits > 0).then(|| title[start..start + digits].parse().unwrap_or(0))
+    }).unwrap_or(0)
 }
 
 pub fn extract_size(title: &str) -> u64 {
-    SIZE.captures(title).map_or(0, |captures| parse_size(&captures[1]))
+    title.match_indices("💾 ").find_map(|(index, marker)| {
+        let start = index + marker.len();
+        let bytes = title.as_bytes();
+        let number_len = bytes[start..].iter().take_while(|byte| byte.is_ascii_digit() || **byte == b'.').count();
+        if number_len == 0 || bytes.get(start + number_len) != Some(&b' ') {
+            return None;
+        }
+        let unit_start = start + number_len + 1;
+        let unit_len = bytes[unit_start..].iter().take_while(|byte| byte.is_ascii_alphanumeric() || **byte == b'_').count();
+        (unit_len > 0).then(|| parse_size(&title[start..unit_start + unit_len]))
+    }).unwrap_or(0)
 }
 
 pub fn extract_provider(title: &str) -> Option<&str> {
@@ -76,6 +85,17 @@ mod tests {
         assert_eq!(extract_provider("⚙️ first provider\n⚙️ second-provider"), Some("provider"));
         assert_eq!(extract_provider("⚙️ provider with suffix"), Some("suffix"));
         assert_eq!(extract_provider("⚙️"), None);
+    }
+
+    #[test]
+    fn extractors_preserve_first_regex_match_semantics() {
+        assert_eq!(extract_seeders("👤 17 then 👤 4"), 17);
+        assert_eq!(extract_seeders("👤 x then 👤 4"), 4);
+        assert_eq!(extract_seeders("👤 999999999999999999999999"), 0);
+        assert_eq!(extract_size("💾 1.5 GB then 💾 2 GB"), 1_610_612_736);
+        assert_eq!(extract_size("💾 bad then 💾 2 GB"), 2_147_483_648);
+        assert_eq!(extract_size("💾 1.5-GB"), 0);
+        assert_eq!(extract_size("💾 1.5 GB_extra"), 1_610_612_736);
     }
 
     #[test]
