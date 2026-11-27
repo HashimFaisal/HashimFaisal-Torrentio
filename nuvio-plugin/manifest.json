@@ -1,14 +1,14 @@
 {
   "name": "Torrentio Local",
-  "version": "0.2.0",
-  "description": "Torrent discovery with same-infoHash deduplication, metadata confidence, swarm-health ranking, and resilient API retries.",
+  "version": "0.2.1",
+  "description": "Torrent discovery with Hex/Base32 BTIH compatibility, duplicate consolidation, metadata confidence, swarm-health ranking, and resilient API retries.",
   "author": "HashimFaisal",
   "scrapers": [
     {
       "id": "torrentio-local",
       "name": "Torrentio Local",
-      "description": "Swarm-aware movie and TV torrent discovery with duplicate consolidation by infoHash, best-metadata merging, conservative resolution validation, and resilient API retries. Nuvio handles P2P playback.",
-      "version": "0.2.0",
+      "description": "Swarm-aware movie and TV torrent discovery with Hex/Base32 BTIH normalization, duplicate consolidation, conservative resolution validation, and resilient API retries. Nuvio handles P2P playback.",
+      "version": "0.2.1",
       "filename": "torrentio.js",
       "supportedTypes": [
         "movie",
