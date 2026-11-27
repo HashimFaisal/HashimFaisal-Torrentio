@@ -36,9 +36,9 @@ cargo run --release -p torrentio-addon
 the database of the Mongo cache collections, `HOST` the bind address (default `::`). `TORBOX_API_URL` and
 `HIGHWAY_API_BASE` override the provider API base urls.
 
-`DIRECT_STREAM_API_URL` optionally enables an HTTPS direct-source API adapter. Set `DIRECT_STREAM_API_KEY` to send an `Authorization: Bearer` token when the API requires authentication. Torrentio sends `GET` requests with `type` (`movie`, `series`, or `anime`) and `id` (IMDb or Kitsu identifier) query parameters. The endpoint must return JSON shaped as `{"streams":[{"name":"Provider\n1080p","title":"filename or release title","url":"https://cdn.example/video.m3u8","behaviorHints":{}}]}`. HTTPS playback URLs are accepted by default, while literal private/local destinations are rejected; set `DIRECT_STREAM_ALLOW_HTTP=true` only for a trusted source that requires HTTP. Redirects are disabled, requests time out after 8 seconds, response bodies are limited to 1 MiB, and at most 20 candidates are returned.
+Torrentio is torrent-first: stream results come from the configured torrent database and are handed to Stremio as torrent sources. The addon does not host media or provide HTTP/HLS playback sources.
 
-Set `DIRECT_STREAM_ONLY=true` to run without PostgreSQL or torrent database lookups and use only the configured direct-source API; `DATABASE_URI` can be omitted in this mode. MongoDB and Redis remain optional. Without a configured API this mode intentionally returns no streams. In mixed mode, direct HTTP streams are preferred, are not filtered by seeder counts, and use a 60-second cache lifetime; the existing torrent/debrid path remains as fallback. Only configure source APIs and media URLs you are authorized to use.
+`DATABASE_URI` is required for torrent lookups. MongoDB and Redis remain optional and provide persistent caching and distributed rate limiting when configured.
 
 The Docker image is built from this directory: 
 `docker build -t torrentio-addon .`
