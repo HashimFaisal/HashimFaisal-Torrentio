@@ -174,7 +174,7 @@ impl Addon {
                         tracing::warn!(%error, "Torrent database lookup failed; returning direct HTTP sources");
                         Vec::new()
                     }
-                    Err(error) => return Err(HandlerError::failed(error)),
+                    Err(error) => return Err(error),
                 };
                 streams.extend(torrent_streams);
                 if streams.is_empty() {
