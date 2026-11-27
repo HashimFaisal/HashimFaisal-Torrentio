@@ -533,18 +533,32 @@ async function queryEztv(imdbId) {
   });
 }
 async function queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, profile) {
-  var thresholds = [10, 5, 1], collected = [], seen = Object.create(null);
-  for (var i = 0; i < thresholds.length; i++) {
-    var rows = await queryIndex(imdbId, kind, season, episode, thresholds[i]);
-    var batch = toStreams(rows, kind, season, episode, diagnostics, profile);
+  // Keep the common path to one upstream request. If the high-seeder query is
+  // sparse, fetch both fallback tiers together instead of waiting serially.
+  var primary = await queryIndex(imdbId, kind, season, episode, 10);
+  var rows = [primary];
+  if (toStreams(primary, kind, season, episode, diagnostics, profile).length < 5) {
+    rows = rows.concat(await Promise.all([
+      queryIndex(imdbId, kind, season, episode, 5),
+      queryIndex(imdbId, kind, season, episode, 1)
+    ]));
+  }
+  var collected = [], seen = Object.create(null);
+  for (var i = 0; i < rows.length; i++) {
+    var batch = toStreams(rows[i], kind, season, episode, diagnostics, profile);
     for (var j = 0; j < batch.length; j++) {
       var hash = batch[j].infoHash;
       if (seen[hash] !== undefined) collected[seen[hash]] = mergeSameHash(collected[seen[hash]], batch[j]);
       else { seen[hash] = collected.length; collected.push(batch[j]); }
     }
-    if (collected.length >= 5) break;
   }
-  return collected;
+  collected.sort(function(a,b) {
+    if (b.networkScore !== a.networkScore) return b.networkScore - a.networkScore;
+    if (b.metadataConfidence !== a.metadataConfidence) return b.metadataConfidence - a.metadataConfidence;
+    if (b.seeders !== a.seeders) return b.seeders - a.seeders;
+    return b.qualityScore - a.qualityScore;
+  });
+  return collected.slice(0, MAX_RESULTS);
 }
 function mergeProviderResults(groups) {
   var merged = [], indexes = Object.create(null);
