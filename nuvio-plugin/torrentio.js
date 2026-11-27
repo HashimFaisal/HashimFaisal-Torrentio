@@ -532,7 +532,7 @@ async function queryEztv(imdbId) {
     });
   });
 }
-async function queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, profile) {
+async function queryRarbgAdaptive(imdbId, kind, requestedSeason, requestedEpisode, diagnostics, profile) {
   var thresholds = [10, 5, 1], collected = [], seen = Object.create(null);
   for (var i = 0; i < thresholds.length; i++) {
     var rows = await queryIndex(imdbId, kind, season, episode, thresholds[i]);
@@ -597,9 +597,14 @@ async function getStreams(tmdbId, mediaType, season, episode) {
   try {
     var kind = str(mediaType).toLowerCase();
     if (kind !== "movie" && kind !== "tv" && kind !== "series") return [];
-    if (kind !== "movie" &&
-        (isNaN(Number(season)) || isNaN(Number(episode)) ||
-         Number(season) < 0 || Number(episode) < 1)) return [];
+    var requestedSeason = null;
+    var requestedEpisode = null;
+    if (kind !== "movie") {
+      requestedSeason = Number(season);
+      requestedEpisode = Number(episode);
+      if (!Number.isSafeInteger(requestedSeason) || !Number.isSafeInteger(requestedEpisode) ||
+          requestedSeason < 0 || requestedEpisode < 1) return [];
+    }
     var imdbId = await imdbFor(tmdbId, kind === "movie" ? "movie" : "tv");
     var diagnostics = Object.create(null);
     var profile = getNetworkProfile();
@@ -613,7 +618,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
       }));
     } else {
       jobs.push(runProvider("EZTV", async function() {
-        return toStreams(await queryEztv(imdbId), kind, season, episode, diagnostics, profile);
+        return toStreams(await queryEztv(imdbId), kind, requestedSeason, requestedEpisode, diagnostics, profile);
       }));
     }
     var groups = await Promise.all(jobs);
