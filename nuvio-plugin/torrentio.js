@@ -231,12 +231,28 @@ function retryDelay(response, attempt) {
   } catch (_) {}
   return Math.min(2000, Math.max(250 * Math.pow(2, attempt), retryAfter));
 }
+var REQUEST_TIMEOUT_MS = 8000;
+async function fetchWithTimeout(url, service) {
+  var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  var timer;
+  var options = { headers: { Accept: "application/json" } };
+  if (controller) options.signal = controller.signal;
+  var pending = fetch(url, options);
+  var timeout = new Promise(function(_, reject) {
+    timer = setTimeout(function() {
+      if (controller) { try { controller.abort(); } catch (_) {} }
+      reject(new Error(service + " request timeout after " + REQUEST_TIMEOUT_MS + "ms"));
+    }, REQUEST_TIMEOUT_MS);
+  });
+  try { return await Promise.race([pending, timeout]); }
+  finally { clearTimeout(timer); }
+}
 async function requestJson(url, service) {
   var lastError;
   for (var attempt = 0; attempt < REQUEST_MAX_ATTEMPTS; attempt++) {
     var response;
     try {
-      response = await fetch(url, { headers: { Accept: "application/json" } });
+      response = await fetchWithTimeout(url, service);
       if (!response.ok) {
         var statusError = new Error(service + " HTTP " + response.status);
         var retryable = response.status === 408 || response.status === 429 ||
@@ -250,6 +266,7 @@ async function requestJson(url, service) {
       return await response.json();
     } catch (error) {
       lastError = error;
+      if (/request timeout/i.test(str(error && error.message))) throw error;
       if (response && !response.ok && !(
         response.status === 408 || response.status === 429 ||
         response.status === 500 || response.status === 502 ||
