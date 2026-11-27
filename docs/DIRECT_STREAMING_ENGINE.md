@@ -27,7 +27,7 @@ The direct path is now integrated as an optional adapter alongside the existing 
 
 ## Source adapter contract
 
-The first implementation is a generic HTTPS API adapter configured with `DIRECT_STREAM_API_URL`. It sends `type` and `id` query parameters and expects a JSON object with a `streams` array. Each stream uses the existing Stremio shape: `name` (two lines: provider and quality), `title`, `url`, and optional `behaviorHints`. The response is capped at 1 MiB and 20 candidates; requests time out after 8 seconds and redirects are disabled. Direct candidates receive a 60-second cache lifetime and bypass provider-name and minimum-seeder filters.
+The first implementation is a generic HTTPS API adapter configured with `DIRECT_STREAM_API_URL`. It sends `type` and `id` query parameters and expects a JSON object with a `streams` array. Each stream uses the existing Stremio shape: `name` (two lines: provider and quality), `title`, `url`, and optional `behaviorHints`. The response is capped at 1 MiB and 20 candidates; requests time out after 8 seconds and redirects are disabled. Playback URLs must use HTTPS unless `DIRECT_STREAM_ALLOW_HTTP=true` is explicitly set. Direct candidates receive a 60-second cache lifetime and bypass provider-name and minimum-seeder filters.
 
 Set `DIRECT_STREAM_ONLY=true` to disable PostgreSQL initialization, torrent database lookups, and tracker initialization entirely. `DATABASE_URI` may be omitted in this mode. A working configured direct-source API is still required; otherwise the addon starts with a warning and returns no streams.
 
