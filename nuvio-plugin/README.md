@@ -14,6 +14,7 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 - TMDB ID → IMDb ID resolution.
 - Exact IMDb/season/episode search through The RarBg API.
 - Validates magnet links and info hashes, removes duplicates, and skips zero-seeder results.
+- Adaptive swarm search: tries 10 seeders first, then falls back to 5 and 1 only when fewer than five usable results are found.
 - Rejects multi-episode ranges and season packs to avoid starting the wrong file.
 - Returns quality, size, seeders, peers and info hash.
 - Nuvio's built-in P2P engine handles playback. This plugin does not host, proxy, or download media.
