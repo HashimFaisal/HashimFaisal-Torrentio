@@ -176,7 +176,7 @@ fn extract_quality(name: &str) -> String {
     } else if contains_ascii_case_insensitive(description, b"4k")
         || contains_ascii_case_insensitive(description, b"uhd")
     {
-        with_hdr_score("2060p", has_hdr)
+        with_hdr_score("2160p", has_hdr)
     } else if Quality::Cam.matches(Some(description), None) {
         Quality::Cam.label().to_owned()
     } else if Quality::Other.matches(Some(description), None) {
@@ -232,7 +232,8 @@ mod tests {
     fn extracts_quality_buckets() {
         assert_eq!(extract_quality("Torrentio\n1080p"), "1080p");
         assert_eq!(extract_quality("Torrentio\n1080p HDR"), "1081p");
-        assert_eq!(extract_quality("Torrentio\n4k"), "2060p");
+        assert_eq!(extract_quality("Torrentio\nUHD"), "2160p");
+        assert_eq!(extract_quality("Torrentio\n4k"), "2160p");
         assert_eq!(extract_quality("Torrentio\nBluRay"), Quality::Other.label());
         assert_eq!(extract_quality("Torrentio\nCAM"), Quality::Cam.label());
     }
