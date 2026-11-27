@@ -9,7 +9,7 @@ use addon::{
     application::Addon,
     domain::TorrentRepository,
     http::{AppState, app},
-    infrastructure::{Budgets, Cache, Metrics, RateLimiter, Repository, Stores, init_best_trackers, logging, store},
+    infrastructure::{Budgets, Cache, EmptyRepository, Metrics, RateLimiter, Repository, Stores, init_best_trackers, logging, store},
     providers::{Context, Endpoints, Mochs, default_providers},
 };
 use anyhow::Context as _;
@@ -44,8 +44,17 @@ async fn run() -> anyhow::Result<()> {
     logging::init();
     let metrics = Metrics::new();
     metrics.spawn_lag_sampler();
-    let database_url = env("DATABASE_URI").context("DATABASE_URI is required")?;
-    let repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
+    let direct_stream_only = env("DIRECT_STREAM_ONLY")
+        .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
+    let (repository, postgres_repository): (Arc<dyn TorrentRepository>, Option<Repository>) =
+        if direct_stream_only {
+            tracing::info!("Direct-only mode enabled; PostgreSQL torrent repository is not initialized");
+            (Arc::new(EmptyRepository), None)
+        } else {
+            let database_url = env("DATABASE_URI").context("DATABASE_URI is required unless DIRECT_STREAM_ONLY=true")?;
+            let repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
+            (Arc::clone(&repository) as Arc<dyn TorrentRepository>, Some((*repository).clone()))
+        };
 
     let mut invalidations = None;
     let stores = match env("MONGODB_URI") {
@@ -70,14 +79,14 @@ async fn run() -> anyhow::Result<()> {
     let invalidation_watch = invalidations.map(|store| cache.watch_invalidations(store));
     let context = Arc::new(Context {
         endpoints: Endpoints { torbox: env("TORBOX_API_URL"), highway: env("HIGHWAY_API_BASE") },
-        repository: Arc::clone(&repository) as Arc<dyn TorrentRepository>,
+        repository: Arc::clone(&repository),
         cache: Arc::clone(&cache),
         metrics: metrics.clone(),
         http: debrid::Http::new(DEBRID_TIMEOUT)?,
     });
     let rate_limiter = RateLimiter::new(env("REDIS_URL").as_deref(), Budgets::from_env(), metrics.clone());
     let addon = Addon::new(
-        Arc::clone(&repository) as Arc<dyn TorrentRepository>,
+        Arc::clone(&repository),
         Arc::clone(&cache),
         Mochs::new(Arc::clone(&context), default_providers(&context)),
         rate_limiter.clone(),
@@ -93,10 +102,14 @@ async fn run() -> anyhow::Result<()> {
         .map_or(Ok(IpAddr::V6(Ipv6Addr::UNSPECIFIED)), |host| host.parse())
         .context("HOST is not an ip address")?;
     let listener = TcpListener::bind(SocketAddr::new(host, port)).await?;
-    tokio::spawn(async move {
-        init_best_trackers().await;
-        tracing::info!(port, "Started addon");
-    });
+    if !direct_stream_only {
+        tokio::spawn(async move {
+            init_best_trackers().await;
+            tracing::info!(port, "Started addon");
+        });
+    } else {
+        tracing::info!(port, "Started addon in direct-only mode");
+    }
     axum::serve(
         listener,
         ServiceExt::<Request>::into_make_service_with_connect_info::<SocketAddr>(app(state, &static_dir)),
@@ -108,7 +121,9 @@ async fn run() -> anyhow::Result<()> {
     }
     rate_limit_sync.stop().await;
     rate_limiter.flush().await;
-    repository.close().await;
+    if let Some(repository) = postgres_repository {
+        repository.close().await;
+    }
     cache.drain().await;
     Ok(())
 }
