@@ -76,7 +76,7 @@ jobs:
             sleep 2
           done
           test "$ready" -eq 1
-          docker run --rm --network host \
+          docker run --rm --user "$(id -u):$(id -g)" --network host \
             --volume "$GITHUB_WORKSPACE/addon/bench:/work" --workdir /work \
             -e BASE=http://127.0.0.1:7000 -e MODE=cold -e VUS=30 \
             -e TARGETS=/work/database-contention-targets.txt \
@@ -105,7 +105,7 @@ jobs:
             sleep 2
           done
           test "$ready" -eq 1
-          docker run --rm --network host \
+          docker run --rm --user "$(id -u):$(id -g)" --network host \
             --volume "$GITHUB_WORKSPACE/addon/bench:/work" --workdir /work \
             -e BASE=http://127.0.0.1:7000 -e MODE=cold -e VUS=64 \
             -e TARGETS=/work/database-contention-targets.txt \
