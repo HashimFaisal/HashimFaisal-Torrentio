@@ -63,6 +63,7 @@ global.fetch = async (url) => {
     {name:"Example.Release.720p.WEB",infoHash:hash("3"),magnet:"magnet:?xt=urn:btih:"+hash("3"),seeders:500,leechers:1,resolution:"2160p",size:900000000,source:"WEB",codec:"x264"},
     {name:"fractional swarm",infoHash:hash("4"),magnet:"magnet:?xt=urn:btih:"+hash("4"),seeders:3.5,leechers:1,resolution:"1080p",size:900000000},
     {name:"verification unavailable",infoHash:hash("5"),magnet:"magnet:?xt=urn:btih:"+hash("5"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"unknown"},
+    {name:"invalid quality score",infoHash:hash("7"),magnet:"magnet:?xt=urn:btih:"+hash("7"),seeders:15,leechers:1,resolution:"1080p",size:900000000,qualityScore:"NaN"},
     {name:"failed verification",infoHash:hash("6"),magnet:"magnet:?xt=urn:btih:"+hash("6"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"failed"}
   ] : mode==="movie" ? [
     {name:"Inception 2160p",infoHash:hash("a"),magnet:"magnet:?xt=urn:btih:"+hash("a"),seeders:80,leechers:80,resolution:"2160p",size:1000000000},
@@ -162,6 +163,11 @@ const {getStreams}=require("./torrentio.js");
     "fractional swarm counts must be rejected");
   assert.ok(metadataResults.some(x=>x.infoHash==="5".repeat(40)),
     "unknown verification state must not be mistaken for a failed verdict");
+  const invalidScore=metadataResults.find(x=>x.infoHash==="7".repeat(40));
+  assert.ok(invalidScore, "a malformed optional quality score must not discard an otherwise valid stream");
+  assert.equal(invalidScore.qualityScore,0, "malformed quality scores must normalize to zero");
+  assert.ok(invalidScore.qualityScoreWarnings.includes("invalid-quality-score"),
+    "malformed quality scores must be visible in diagnostics");
   assert.ok(!metadataResults.some(x=>x.infoHash==="6".repeat(40)),
     "explicit failed verification must be rejected");
 
