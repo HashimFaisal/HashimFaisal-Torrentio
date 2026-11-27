@@ -374,7 +374,8 @@ function mergeSameHash(existing, incoming) {
   merged.source = preferred.source || existing.source || incoming.source || "";
   merged.codec = preferred.codec || existing.codec || incoming.codec || "";
   merged.hdr = preferred.hdr || existing.hdr || incoming.hdr || "";
-  merged.description = [merged.source, merged.codec, merged.hdr].filter(Boolean).join(" · ");
+  merged.audio = preferred.audio || existing.audio || incoming.audio || "";
+  merged.description = [merged.source, merged.codec, merged.hdr, merged.audio].filter(Boolean).join(" · ");
   merged.duplicateCount = (existing.duplicateCount || 1) + (incoming.duplicateCount || 1);
   var titles = (existing.alternateTitles || [existing.title])
     .concat(incoming.alternateTitles || [incoming.title]).filter(Boolean);
