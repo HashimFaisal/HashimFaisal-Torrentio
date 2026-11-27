@@ -1,3 +1,4 @@
+use parse_torrent_title::parse;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -262,7 +263,28 @@ fn is_kitsu_id(value: &str) -> bool {
     )
 }
 
-fn to_streams(records: Vec<Record>) -> Vec<Stream> {
+fn record_rank(record: &Record) -> (u32, i16, i64, i64) {
+    let file_info = parse(&record.title);
+    let torrent_info = parse(&record.torrent.title);
+    let resolution = file_info
+        .resolution()
+        .or_else(|| torrent_info.resolution())
+        .or(record.torrent.resolution.as_deref())
+        .and_then(|value| value.trim_end_matches('p').parse::<u32>().ok())
+        .unwrap_or(0);
+    (
+        resolution,
+        record.torrent.seeders.unwrap_or(0).max(0),
+        record.size.or(record.torrent.size).unwrap_or(0).max(0),
+        record.torrent.upload_date.timestamp(),
+    )
+}
+
+fn to_streams(mut records: Vec<Record>) -> Vec<Stream> {
+    // Duplicate hash/file entries can arrive from different providers or query paths.
+    // Rank them here instead of relying on database row order before keeping one.
+    records.sort_by(|left, right| record_rank(right).cmp(&record_rank(left)));
+
     let mut seen = HashSet::with_capacity(records.len());
     records
         .into_iter()
@@ -743,16 +765,28 @@ mod tests {
     }
 
     #[test]
-    fn deduplicates_same_hash_and_file_index_after_preferring_better_seeders() {
+    fn deduplicates_same_hash_and_file_index_by_rank_not_input_order() {
         let mut weaker = record("abc", "Movie.2020.720p.WEB-DL.x264-GRP", 5);
         weaker.file_index = Some(2);
         let mut stronger = record("ABC", "Movie.2020.1080p.BluRay.x264-GRP", 40);
         stronger.file_index = Some(2);
 
-        // Repository queries return the best-ranked candidate first.
-        let streams = to_streams(vec![stronger, weaker]);
+        let streams = to_streams(vec![weaker, stronger]);
         assert_eq!(streams.len(), 1);
         assert!(streams[0].title.contains("👤 40"));
+        assert!(streams[0].name.ends_with("1080p"));
+    }
+
+    #[test]
+    fn duplicate_rank_prefers_more_seeders_when_quality_matches() {
+        let mut weaker = record("abc", "Movie.2020.1080p.WEB-DL.x264-GRP", 8);
+        weaker.file_index = Some(0);
+        let mut stronger = record("ABC", "Movie.2020.1080p.BluRay.x264-GRP", 80);
+        stronger.file_index = Some(0);
+
+        let streams = to_streams(vec![weaker, stronger]);
+        assert_eq!(streams.len(), 1);
+        assert!(streams[0].title.contains("👤 80"));
     }
 
     #[test]
