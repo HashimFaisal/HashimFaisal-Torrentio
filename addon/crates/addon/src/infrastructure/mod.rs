@@ -1,6 +1,6 @@
 pub(crate) mod breaker;
-pub(crate) mod empty_repository;
 pub(crate) mod cache;
+pub(crate) mod empty_repository;
 pub(crate) mod flight;
 pub mod logging;
 pub(crate) mod magnet;
