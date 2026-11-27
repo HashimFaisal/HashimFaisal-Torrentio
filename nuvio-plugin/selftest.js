@@ -14,6 +14,21 @@ global.fetch = async (url) => {
       new URL(String(url)).searchParams.get("min_seeders") === "5") {
     return {ok:false,status:400,headers:{get:()=>null},json:async()=>({})};
   }
+  if (String(url).includes("/search/?") && mode === "fallback-one-fails") {
+    const threshold = Number(new URL(String(url)).searchParams.get("min_seeders"));
+    if (threshold === 5) {
+      return {ok:false,status:400,headers:{get:()=>null},json:async()=>({})};
+    }
+    const count = threshold === 10 ? 2 : 2;
+    const base = threshold === 10 ? 1 : 6;
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const hash = String(base + i).repeat(40);
+      rows.push({name:"Fallback resilience " + hash.slice(0,1) + " 1080p",infoHash:hash,
+        magnet:"magnet:?xt=urn:btih:" + hash,seeders:20,leechers:2,size:900000000,resolution:"1080p"});
+    }
+    return {ok:true,status:200,json:async()=>({results:rows})};
+  }
   if (String(url).includes("/search/?") && mode === "fallback-parallel") {
     activeIndexRequests++;
     maxConcurrentIndexRequests = Math.max(maxConcurrentIndexRequests, activeIndexRequests);
