@@ -25,7 +25,8 @@ global.fetch = async (url) => {
     {name:"Example.Release.1080p.BluRay",infoHash:hash("2"),magnet:"magnet:?xt=urn:btih:"+hash("2"),seeders:25,leechers:2,resolution:"1080p",size:2200000000,source:"BluRay",codec:"x265"},
     {name:"Example.Release.720p.WEB",infoHash:hash("3"),magnet:"magnet:?xt=urn:btih:"+hash("3"),seeders:500,leechers:1,resolution:"2160p",size:900000000,source:"WEB",codec:"x264"},
     {name:"fractional swarm",infoHash:hash("4"),magnet:"magnet:?xt=urn:btih:"+hash("4"),seeders:3.5,leechers:1,resolution:"1080p",size:900000000},
-    {name:"failed verification",infoHash:hash("5"),magnet:"magnet:?xt=urn:btih:"+hash("5"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:false}
+    {name:"verification unavailable",infoHash:hash("5"),magnet:"magnet:?xt=urn:btih:"+hash("5"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"unknown"},
+    {name:"failed verification",infoHash:hash("6"),magnet:"magnet:?xt=urn:btih:"+hash("6"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"failed"}
   ] : mode==="movie" ? [
     {name:"Inception 2160p",infoHash:hash("a"),magnet:"magnet:?xt=urn:btih:"+hash("a"),seeders:80,leechers:80,resolution:"2160p",size:1000000000},
     {name:"Inception 720p",infoHash:hash("e"),magnet:"magnet:?xt=urn:btih:"+hash("e"),seeders:20,leechers:2,resolution:"720p",size:3000000000},
@@ -88,7 +89,7 @@ const {getStreams}=require("./torrentio.js");
   // Metadata confidence and invalid metadata rejection.
   mode="metadata"; calls.length=0;
   const metadataResults=await getStreams("737373","movie",null,null);
-  assert.equal(metadataResults.length,2);
+  assert.equal(metadataResults.length,3);
   const mismatch=metadataResults.find(x=>x.infoHash==="3".repeat(40));
   assert.ok(mismatch);
   assert.equal(mismatch.quality,"720p",
@@ -97,8 +98,10 @@ const {getStreams}=require("./torrentio.js");
   assert.ok(mismatch.metadataConfidence<100);
   assert.ok(!metadataResults.some(x=>x.infoHash==="4".repeat(40)),
     "fractional swarm counts must be rejected");
-  assert.ok(!metadataResults.some(x=>x.infoHash==="5".repeat(40)),
-    "explicitly failed verification must be rejected");
+  assert.ok(metadataResults.some(x=>x.infoHash==="5".repeat(40)),
+    "unknown verification state must not be mistaken for a failed verdict");
+  assert.ok(!metadataResults.some(x=>x.infoHash==="6".repeat(40)),
+    "explicit failed verification must be rejected");
 
   console.log("PASS: swarm ranking, magnet integrity, episode filtering, cache/coalescing, transient retry recovery, and permanent-error fast-fail.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
