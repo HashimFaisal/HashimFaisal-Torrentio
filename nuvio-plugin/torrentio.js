@@ -1,15 +1,9 @@
-/* Torrentio Local for Nuvio. Metadata only; Nuvio handles P2P playback. */
+/* Torrentio Local for Nuvio. Returns torrent metadata; Nuvio handles P2P playback. */
 var TMDB_BASE = "https://api.themoviedb.org/3";
 var INDEX_BASE = "https://therarbg.com/api/v1";
 var MAX_RESULTS = 20;
 
 function str(v) { return v === null || v === undefined ? "" : String(v); }
-function sizeLabel(bytes) {
-  var n = Number(bytes || 0), units = ["B", "MB", "GB", "TB"], i = 0;
-  if (!isFinite(n) || n <= 0) return "";
-  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-  return (n >= 100 ? Math.round(n) : n.toFixed(1)) + " " + units[i];
-}
 function validHash(v) { return /^[a-f0-9]{40}$/i.test(str(v)); }
 function isPack(name) {
   return /S\d{1,2}E\d{1,3}\s*[-–]\s*\d{1,3}/i.test(str(name)) ||
@@ -17,8 +11,10 @@ function isPack(name) {
 }
 function exactEpisode(item, season, episode) {
   if (isPack(item.name)) return false;
-  if (Number(item.season) === Number(season) && Number(item.episode) === Number(episode)) return true;
-  var re = new RegExp("(?:^|[^A-Z0-9])S0?" + Number(season) + "E0?" + Number(episode) + "(?![0-9])", "i");
+  if (Number(item.season) === Number(season) &&
+      Number(item.episode) === Number(episode)) return true;
+  var re = new RegExp("(?:^|[^A-Z0-9])S0?" + Number(season) +
+    "E0?" + Number(episode) + "(?![0-9])", "i");
   return re.test(str(item.name));
 }
 async function imdbFor(tmdbId, mediaType) {
@@ -52,26 +48,47 @@ async function queryIndex(imdbId, kind, season, episode) {
 function toStreams(items, kind, season, episode) {
   var seen = {}, out = [];
   for (var i = 0; i < items.length; i++) {
-    var item = items[i] || {}, hash = str(item.infoHash).toLowerCase();
-    var magnet = str(item.magnet), seeds = Number(item.seeders || 0);
-    if (!validHash(hash) || magnet.indexOf("magnet:?xt=urn:btih:") !== 0 || seen[hash] || seeds < 1) continue;
+    var item = items[i] || {};
+    var hash = str(item.infoHash).toLowerCase();
+    var magnet = str(item.magnet);
+    var seeds = Number(item.seeders || 0);
+    var bytes = Number(item.size || 0);
+    if (!validHash(hash) || magnet.indexOf("magnet:?xt=urn:btih:") !== 0 ||
+        seen[hash] || seeds < 1 || !isFinite(bytes) || bytes <= 0) continue;
+    if (item.verifile === "failed") continue;
     if (kind !== "movie" && !exactEpisode(item, season, episode)) continue;
+    // Discard clearly corrupt index sizes, rather than presenting multi-terabyte movie files.
+    if (kind === "movie" && bytes > 200 * 1024 * 1024 * 1024) continue;
+    if (kind !== "movie" && bytes > 1024 * 1024 * 1024 * 1024) continue;
     seen[hash] = true;
     var quality = str(item.resolution) || "Torrent";
+    var detail = [str(item.source), str(item.codec), str(item.hdr)].filter(Boolean).join(" · ");
+    var score = Number(item.qualityScore || 0);
     out.push({
       title: str(item.name) || "Torrent release",
-      name: "The RarBg · " + quality + " · " + seeds + " seeds",
+      name: "The RarBg · " + quality + " · " + seeds + " seeds" +
+        (score ? " · Q" + score : ""),
       url: magnet,
       quality: quality,
-      size: sizeLabel(item.size),
+      size: bytes,
       provider: "The RarBg",
       type: "torrent",
       seeders: seeds,
       peers: Number(item.leechers || 0),
-      infoHash: hash
+      infoHash: hash,
+      source: str(item.source),
+      codec: str(item.codec),
+      hdr: str(item.hdr),
+      qualityScore: score,
+      verifile: str(item.verifile),
+      description: detail
     });
   }
-  return out.slice(0, MAX_RESULTS); // Preserve the index's quality ranking.
+  out.sort(function(a,b) {
+    if (b.qualityScore !== a.qualityScore) return b.qualityScore - a.qualityScore;
+    return b.seeders - a.seeders;
+  });
+  return out.slice(0, MAX_RESULTS);
 }
 async function getStreams(tmdbId, mediaType, season, episode) {
   try {
