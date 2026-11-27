@@ -1,0 +1,52 @@
+name: Torrent Engine Runtime Smoke Test
+
+on:
+  push:
+    branches:
+      - direct-streaming
+    paths:
+      - "addon/**"
+      - ".github/workflows/runtime-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build runtime image
+        run: docker build -t torrentio-addon-smoke ./addon
+
+      - name: Start addon with lazy PostgreSQL connection
+        run: |
+          docker run -d --name torrentio-addon-smoke \
+            -e DATABASE_URI=postgres://smoke:smoke@127.0.0.1:1/torrentio \
+            -e HOST=0.0.0.0 \
+            -e PORT=7000 \
+            -p 127.0.0.1:7000:7000 \
+            torrentio-addon-smoke
+
+      - name: Verify HTTP startup, manifest, and configure page
+        run: |
+          cleanup() {
+            docker logs torrentio-addon-smoke || true
+            docker rm -f torrentio-addon-smoke || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:7000/manifest.json -o /tmp/manifest.json; then
+              break
+            fi
+            sleep 2
+          done
+
+          test -s /tmp/manifest.json
+          jq -e 'type == "object" and (.id | type == "string") and (.resources | type == "array")' /tmp/manifest.json
+
+          curl --fail --silent http://127.0.0.1:7000/configure -o /tmp/configure.html
+          grep -qi '<html' /tmp/configure.html
