@@ -223,7 +223,7 @@ mod tests {
             .and(query_param("id", "tt1234567"))
             .and(header("authorization", "Bearer test-secret"))
             .respond_with(ResponseTemplate::new(200).set_body_raw(
-                r#"{"streams":[{"name":"Licensed CDN\\n1080p","title":"Sample feature","url":"https://cdn.example/video.m3u8"}]}"#,
+                r#"{"streams":[{"name":"Licensed CDN\n1080p","title":"Sample feature","url":"https://cdn.example/video.m3u8"}]}"#,
                 "application/json",
             ))
             .expect(1)
