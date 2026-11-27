@@ -102,6 +102,12 @@ const {getStreams}=require("./torrentio.js");
       "multi-episode release " + rejected + " must not be returned for one episode");
   }
   assert.match(calls[1],/season=1&episode=1/);
+  const beforeInvalidEpisodes = calls.length;
+  assert.deepEqual(await getStreams("1396","tv",1.5,1), [], "fractional season must be rejected");
+  assert.deepEqual(await getStreams("1396","tv",1,1.25), [], "fractional episode must be rejected");
+  assert.deepEqual(await getStreams("1396","tv",-1,1), [], "negative season must be rejected");
+  assert.deepEqual(await getStreams("1396","tv",1,0), [], "episode zero must be rejected");
+  assert.equal(calls.length,beforeInvalidEpisodes,"invalid episode coordinates must not call upstream APIs");
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
 
   // Repeating the same lookup should be served from the short-lived cache.
