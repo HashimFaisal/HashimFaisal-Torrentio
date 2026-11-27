@@ -1,4 +1,5 @@
 name: Torrent Engine Quality Checks
+# Validates formatting, lint, and tests for the torrent-only engine.
 
 on:
   push:
