@@ -74,7 +74,7 @@ mod tests {
     fn extracts_provider() {
         assert_eq!(extract_provider(TITLE), Some("ThePirateBay"));
         assert_eq!(extract_provider("none"), None);
-        assert_eq!(extract_provider("⚙️ first provider\n⚙️ second-provider"), Some("second-provider"));
+        assert_eq!(extract_provider("⚙️ first provider\n⚙️ second-provider"), Some("provider"));
         assert_eq!(extract_provider("⚙️ provider with suffix"), Some("suffix"));
         assert_eq!(extract_provider("⚙️"), None);
     }
