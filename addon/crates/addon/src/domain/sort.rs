@@ -111,10 +111,7 @@ fn filter_by_seeders(streams: Vec<Stream>, config: &Config) -> Vec<Stream> {
     if minimum == 0 || providers::has_moch_configured(config) {
         return streams;
     }
-    streams
-        .into_iter()
-        .filter(|stream| extract_seeders(&stream.title) >= minimum)
-        .collect()
+    streams.into_iter().filter(|stream| extract_seeders(&stream.title) >= minimum).collect()
 }
 
 fn sort_by_size(streams: Vec<Stream>) -> Vec<Stream> {
@@ -273,5 +270,4 @@ mod tests {
         let streams = vec![stream("T\n720p", "a\n👤 5"), stream("T\n720p", "b\n👤 0")];
         assert_eq!(sort_streams(streams, &config).len(), 2);
     }
-
 }
