@@ -5,7 +5,7 @@ const calls = [];
 global.fetch = async (url) => {
   calls.push(String(url));
   if (String(url).includes("/external_ids?")) {
-    return {ok:true,status:200,json:async()=>({imdb_id:mode==="movie"?"tt1375666":"tt0903747"})};
+    return {ok:true,status:200,json:async()=>({imdb_id:mode==="movie"?"tt1375666":mode==="tv"?"tt0903747":"tt1234567"})};
   }
   const hash = (c) => c.repeat(40);
   const rows = mode==="movie" ? [
@@ -40,11 +40,13 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(calls.length,beforeRepeat,"cached lookup must not issue duplicate network requests");
 
   // Concurrent identical lookups should share in-flight TMDB and index requests.
+  mode="concurrent";
   const beforeConcurrent = calls.length;
   await Promise.all([
-    getStreams("27205","movie",null,null),
-    getStreams("27205","movie",null,null)
+    getStreams("424242","movie",null,null),
+    getStreams("424242","movie",null,null)
   ]);
-  assert.equal(calls.length,beforeConcurrent,"concurrent lookups must be coalesced");
+  assert.equal(calls.length-beforeConcurrent,4,
+    "two simultaneous lookups should share one TMDB request and three index requests");
   console.log("PASS: swarm-aware ranking, magnet integrity, exact episode filtering, TTL cache, and concurrent request coalescing.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
