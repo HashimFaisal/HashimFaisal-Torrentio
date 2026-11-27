@@ -1,0 +1,114 @@
+name: Torrent Engine Self Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      vus:
+        description: "Concurrent virtual users"
+        required: true
+        default: "64"
+        type: string
+      duration:
+        description: "Benchmark duration (for example 60s or 2m)"
+        required: true
+        default: "60s"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: smoke
+          POSTGRES_PASSWORD: smoke
+          POSTGRES_DB: torrentio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smoke -d torrentio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate benchmark settings
+        env:
+          VUS: ${{ inputs.vus }}
+          DURATION: ${{ inputs.duration }}
+        run: |
+          set -eu
+          case "$VUS" in ''|*[!0-9]*) echo "VUS must be a positive integer" >&2; exit 1 ;; esac
+          test "$VUS" -ge 1
+          case "$DURATION" in *s|*m) ;; *) echo "DURATION must end in s or m" >&2; exit 1 ;; esac
+          echo "VUS=$VUS" >> "$GITHUB_ENV"
+          echo "DURATION=$DURATION" >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Initialize disposable PostgreSQL fixture
+        env:
+          PGPASSWORD: smoke
+        run: |
+          psql -v ON_ERROR_STOP=1 \
+            "postgres://smoke:smoke@127.0.0.1:5432/torrentio" \
+            -f addon/bench/fixtures/runtime-smoke.sql
+
+      - name: Build candidate runtime
+        run: docker build -t torrentio-addon-benchmark ./addon
+
+      - name: Start candidate
+        run: |
+          docker run -d --name torrentio-addon-benchmark \
+            --network host \
+            -e DATABASE_URI=postgres://smoke:smoke@127.0.0.1:5432/torrentio \
+            -e HOST=127.0.0.1 \
+            -e PORT=7000 \
+            torrentio-addon-benchmark
+
+      - name: Wait for candidate and verify fixture lookup
+        run: |
+          cleanup() {
+            docker logs torrentio-addon-benchmark || true
+            docker rm -f torrentio-addon-benchmark || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:7000/manifest.json -o /tmp/manifest.json; then
+              break
+            fi
+            sleep 2
+          done
+          test -s /tmp/manifest.json
+          curl --fail --silent http://127.0.0.1:7000/stream/movie/tt1234567.json -o /tmp/streams.json
+          jq -e 'any(.streams[]; .infoHash == "0123456789abcdef0123456789abcdef01234567")' /tmp/streams.json
+
+          printf 'movie tt1234567\n' > addon/bench/self-targets.txt
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE/addon/bench:/work" \
+            --workdir /work \
+            -e BASE=http://127.0.0.1:7000 \
+            -e MODE=hot \
+            -e VUS \
+            -e DURATION \
+            -e TARGETS=/work/self-targets.txt \
+            grafana/k6:0.54.0 run \
+            --summary-export=/work/self-benchmark-summary.json load.js
+
+      - name: Upload self benchmark summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: torrent-engine-self-benchmark-${{ github.run_id }}
+          path: addon/bench/self-benchmark-summary.json
+          if-no-files-found: ignore
+          retention-days: 30
