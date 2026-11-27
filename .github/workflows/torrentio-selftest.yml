@@ -1,0 +1,29 @@
+name: Torrentio Local self-test
+
+on:
+  push:
+    branches:
+      - direct-streaming
+    paths:
+      - "nuvio-plugin/**"
+      - ".github/workflows/torrentio-selftest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Syntax check
+        working-directory: nuvio-plugin
+        run: node --check torrentio.js
+      - name: Run self-tests
+        working-directory: nuvio-plugin
+        run: node selftest.js
