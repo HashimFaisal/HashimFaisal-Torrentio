@@ -54,6 +54,9 @@ function providerState(name) {
 function classifyProviderError(error) {
   var message = str(error && error.message ? error.message : error).toLowerCase();
   var status = Number((message.match(/http\s+(\d{3})/) || [])[1] || 0);
+  if (status === 401 || status === 403) return "provider-auth-error";
+  if (status === 404 || status === 410) return "provider-endpoint-error";
+  if (status === 429) return "provider-rate-limited";
   if (status >= 400 && status < 500) return "provider-http-client-error";
   if (status >= 500) return "provider-http-server-error";
   if (/invalid .*response|malformed|unexpected.*json/.test(message)) return "malformed-index-response";
@@ -94,7 +97,13 @@ function recordProvider(name, startedAt, ok, detail) {
     state.lastOutcome = state.lastErrorKind;
     state.lastFailureAt = Date.now();
     // A failed half-open probe immediately reopens the circuit.
-    if (state.consecutiveFailures >= PROVIDER_FAILURE_THRESHOLD || state.circuitOpenUntil > 0) {
+    // Configuration/endpoint failures are unlikely to heal within a short
+    // retry window. Rate limits receive a shorter but explicit backoff.
+    if (state.lastErrorKind === "provider-auth-error" || state.lastErrorKind === "provider-endpoint-error") {
+      state.circuitOpenUntil = Date.now() + 10 * 60 * 1000;
+    } else if (state.lastErrorKind === "provider-rate-limited") {
+      state.circuitOpenUntil = Date.now() + 2 * 60 * 1000;
+    } else if (state.consecutiveFailures >= PROVIDER_FAILURE_THRESHOLD || state.circuitOpenUntil > 0) {
       state.circuitOpenUntil = Date.now() + PROVIDER_COOLDOWN_MS;
     }
   }
