@@ -221,10 +221,9 @@ fn contains_imdb_id(value: &str) -> bool {
 
 fn contains_kitsu_id(value: &str) -> bool {
     let bytes = value.as_bytes();
-    bytes
-        .windows(6)
-        .enumerate()
-        .any(|(index, prefix)| prefix.eq_ignore_ascii_case(b"kitsu:") && bytes.get(index + 6).is_some_and(u8::is_ascii_digit))
+    bytes.windows(6).enumerate().any(|(index, prefix)| {
+        prefix.eq_ignore_ascii_case(b"kitsu:") && bytes.get(index + 6).is_some_and(u8::is_ascii_digit)
+    })
 }
 
 fn is_digits(value: &str) -> bool {
