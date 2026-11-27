@@ -65,6 +65,23 @@ Targets are `<type> <id>` lines. `hot` repeats 100 ids against a warm memory cac
 once against empty caches. Add `CONFIG=torbox=<key>` to include a debrid availability call per request. Flush Redis
 between runs: every run leaves about a million rate-limit keys behind and a bloated keyspace slows the benchmark itself.
 
+For a controlled official-vs-candidate comparison, point the same script and target files at each deployment.
+Keep CPU/memory limits, Postgres snapshot, Redis/Mongo state, configuration, and k6 host identical. Run each case
+at least five times and compare the median throughput, p50/p95/p99 latency, failed-request rate, and response
+sizes. For cold runs, restore equivalent empty cache state before **each** run; alternate which deployment runs
+first to reduce order bias. Save the full k6 summaries:
+
+```
+BASE="$OFFICIAL_BASE" MODE=hot  TARGETS=hot_targets.txt  VUS=64 k6 run --summary-export=official-hot.json  bench/load.js
+BASE="$CANDIDATE_BASE" MODE=hot  TARGETS=hot_targets.txt  VUS=64 k6 run --summary-export=candidate-hot.json bench/load.js
+BASE="$OFFICIAL_BASE" MODE=cold TARGETS=cold_targets.txt VUS=64 k6 run --summary-export=official-cold.json  bench/load.js
+BASE="$CANDIDATE_BASE" MODE=cold TARGETS=cold_targets.txt VUS=64 k6 run --summary-export=candidate-cold.json bench/load.js
+```
+
+Do not compare runs with different targets, warm/cold cache conditions, debrid keys, or resource limits. These
+instructions define the measurement protocol; they are not a claim that a new official-vs-candidate benchmark
+has already been run.
+
 Results on one machine (14 cores), clean Redis, Node as deployed (1 worker) and with 4 workers:
 
 | Scenario | Node, 1 worker | Node, 4 workers | Rust, 1 process |
