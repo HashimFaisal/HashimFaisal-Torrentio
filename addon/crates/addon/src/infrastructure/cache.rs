@@ -422,6 +422,7 @@ mod tests {
         let second = cache.streams_in_memory("tt1").await.unwrap();
         assert_eq!(*first, streams);
         assert_eq!(*second, streams);
+        assert!(Arc::ptr_eq(&first, &second), "memory hits should reuse the decoded stream allocation");
     }
 
     #[tokio::test]
