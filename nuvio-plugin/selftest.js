@@ -14,7 +14,11 @@ global.fetch = async (url) => {
     return {ok:false,status:503,headers:{get:()=>null},json:async()=>({})};
   }
   if (String(url).includes("/external_ids?")) {
-    return {ok:true,status:200,json:async()=>({imdb_id:mode==="movie"?"tt1375666":mode==="tv"?"tt0903747":"tt1234567"})};
+    const imdbId = String(url).includes("/525252/") ? "tt525252" :
+      String(url).includes("/626262/") ? "tt626262" :
+      String(url).includes("/424242/") ? "tt424242" :
+      mode==="movie" ? "tt1375666" : mode==="tv" ? "tt0903747" : "tt1234567";
+    return {ok:true,status:200,json:async()=>({imdb_id:imdbId})};
   }
   const hash = (c) => c.repeat(40);
   const rows = mode==="movie" ? [
@@ -24,9 +28,9 @@ global.fetch = async (url) => {
     {name:"wrong magnet hash",infoHash:hash("g"),magnet:"magnet:?xt=urn:btih:"+hash("h"),seeders:99,leechers:0,resolution:"1080p",size:1000000000},
     {name:"bad",infoHash:"bad",magnet:"magnet:?xt=urn:btih:bad",seeders:10}
   ] : [
-    {name:"Breaking.Bad.S01E01.Pilot.1080p",infoHash:hash("b"),magnet:"magnet:?xt=urn:btih:"+hash("b"),seeders:50,resolution:"1080p",season:1,episode:1},
-    {name:"Breaking.Bad.S01E01-07.PACK",infoHash:hash("c"),magnet:"magnet:?xt=urn:btih:"+hash("c"),seeders:60,season:1,episode:1},
-    {name:"Breaking.Bad.S02E01.1080p",infoHash:hash("d"),magnet:"magnet:?xt=urn:btih:"+hash("d"),seeders:60,season:2,episode:1}
+    {name:"Breaking.Bad.S01E01.Pilot.1080p",infoHash:hash("b"),magnet:"magnet:?xt=urn:btih:"+hash("b"),seeders:50,resolution:"1080p",season:1,episode:1,size:1500000000},
+    {name:"Breaking.Bad.S01E01-07.PACK",infoHash:hash("c"),magnet:"magnet:?xt=urn:btih:"+hash("c"),seeders:60,season:1,episode:1,size:5000000000},
+    {name:"Breaking.Bad.S02E01.1080p",infoHash:hash("d"),magnet:"magnet:?xt=urn:btih:"+hash("d"),seeders:60,season:2,episode:1,size:1500000000}
   ];
   return {ok:true,status:200,json:async()=>({results:rows})};
 };
