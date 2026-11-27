@@ -45,8 +45,8 @@ async fn run() -> anyhow::Result<()> {
     let metrics = Metrics::new();
     metrics.spawn_lag_sampler();
     let database_url = env("DATABASE_URI").context("DATABASE_URI is required")?;
-    let repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
-    let repository: Arc<dyn TorrentRepository> = repository;
+    let postgres_repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
+    let repository: Arc<dyn TorrentRepository> = postgres_repository.clone();
 
     let mut invalidations = None;
     let stores = match env("MONGODB_URI") {
@@ -109,7 +109,7 @@ async fn run() -> anyhow::Result<()> {
     }
     rate_limit_sync.stop().await;
     rate_limiter.flush().await;
-    repository.close().await;
+    postgres_repository.close().await;
     cache.drain().await;
     Ok(())
 }
