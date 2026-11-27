@@ -215,5 +215,5 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(calls.filter(x=>x.includes("eztvx.to/api/get-torrents")).length,0,
     "an endpoint with an authentication failure must be bypassed during its extended cooldown");
 
-  console.log("PASS: multi-provider fan-out, provider isolation and circuit breaking, latency-driven network profiles, cross-source deduplication, swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, retry recovery, and metadata validation.");
+  console.log("PASS: multi-provider fan-out, provider isolation and circuit breaking, latency-driven network profiles, cross-source deduplication, multi-episode pack exclusion, swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, retry recovery, and metadata validation.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
