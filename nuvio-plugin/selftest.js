@@ -3,6 +3,7 @@ global.TMDB_API_KEY = "test-key";
 let mode = "movie";
 let transientFailures = 0;
 let forcedIndexStatus = 0;
+let forcedYtsStatus = 0;
 const calls = [];
 global.fetch = async (url) => {
   calls.push(String(url));
@@ -12,6 +13,9 @@ global.fetch = async (url) => {
   if (String(url).includes("/search/?") && transientFailures > 0) {
     transientFailures--;
     return {ok:false,status:503,headers:{get:()=>null},json:async()=>({})};
+  }
+  if (String(url).includes("movies-api.accel.li") && forcedYtsStatus) {
+    return {ok:false,status:forcedYtsStatus,headers:{get:()=>null},json:async()=>({})};
   }
   if (String(url).includes("movies-api.accel.li")) {
     const imdb = new URL(String(url)).searchParams.get("query_term");
@@ -36,6 +40,10 @@ global.fetch = async (url) => {
     const imdbId = String(url).includes("/525252/") ? "tt525252" :
       String(url).includes("/626262/") ? "tt626262" :
       String(url).includes("/424242/") ? "tt424242" :
+      String(url).includes("/636363/") ? "tt636363" :
+      String(url).includes("/646464/") ? "tt646464" :
+      String(url).includes("/656565/") ? "tt656565" :
+      String(url).includes("/676767/") ? "tt676767" :
       mode==="movie" ? "tt1375666" : mode==="tv" ? "tt0903747" : "tt1234567";
     return {ok:true,status:200,json:async()=>({imdb_id:imdbId})};
   }
@@ -110,6 +118,17 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(calls.filter(x=>x.includes("/search/?")).length,1,
     "HTTP 401 must fail fast while the independent YTS provider remains available");
   forcedIndexStatus=0;
+
+  // Three consecutive YTS outages open its circuit; a later lookup skips YTS during cooldown.
+  forcedYtsStatus=503; calls.length=0;
+  await getStreams("636363","movie",null,null);
+  await getStreams("646464","movie",null,null);
+  await getStreams("656565","movie",null,null);
+  calls.length=0;
+  await getStreams("676767","movie",null,null);
+  assert.equal(calls.filter(x=>x.includes("movies-api.accel.li")).length,0,
+    "a provider with repeated failures must be skipped during its cooldown");
+  forcedYtsStatus=0;
 
   // Metadata confidence and invalid metadata rejection.
   mode="metadata"; calls.length=0;
