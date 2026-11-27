@@ -165,8 +165,8 @@ impl Quality {
     }
 }
 
-fn hdr_profiles(quality: Option<&str>) -> String {
-    quality.map(|quality| quality.split(' ').skip(1).collect::<Vec<_>>().join(",")).unwrap_or_default()
+fn hdr_profiles(quality: Option<&str>) -> &str {
+    quality.and_then(|quality| quality.split_once(' ').map(|(_, profiles)| profiles)).unwrap_or_default()
 }
 
 pub fn apply(streams: &[Stream], config: &Config, content_type: ContentType) -> Vec<Stream> {
