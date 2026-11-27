@@ -99,6 +99,7 @@ jobs:
 
           printf 'movie tt1234567\n' > addon/bench/self-targets.txt
           docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
             --volume "$GITHUB_WORKSPACE/addon/bench:/work" \
             --workdir /work \
             -e BASE=http://127.0.0.1:7000 \
