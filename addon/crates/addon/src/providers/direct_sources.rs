@@ -114,11 +114,11 @@ fn validate_stream(mut stream: Stream) -> Option<Stream> {
     }
 
     stream.url = Some(url.to_string());
-    let mut name_parts = stream.name.splitn(2, '\\n');
+    let mut name_parts = stream.name.splitn(2, '\n');
     let provider_name = name_parts.next().unwrap_or_default().trim();
     let quality = name_parts.next().unwrap_or("Direct").trim();
     let provider_name = if provider_name.is_empty() { "Direct source" } else { provider_name };
-    stream.name = format!("[HTTP] {provider_name}\\n{quality}");
+    stream.name = format!("[HTTP] {provider_name}\n{quality}");
     Some(stream)
 }
 
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn labels_direct_streams_for_ordering_and_diagnostics() {
         let result = validate_stream(stream("https://cdn.example/video.mp4")).unwrap();
-        assert_eq!(result.name, "[HTTP] Example CDN");
+        assert_eq!(result.name, "[HTTP] Example CDN\nDirect");
     }
 
     #[test]
