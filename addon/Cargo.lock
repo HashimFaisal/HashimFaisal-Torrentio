@@ -3492,6 +3492,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "woothee",
+ "wiremock",
  "zstd",
 ]
 
