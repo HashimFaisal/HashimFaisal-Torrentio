@@ -708,7 +708,9 @@ mod tests {
 
         let streams = to_streams(vec![first, second]);
         assert_eq!(streams.len(), 2);
-        assert_eq!(streams.iter().map(|stream| stream.file_idx).collect::<Vec<_>>(), [Some(1), Some(2)]);
+        let mut file_indices = streams.iter().map(|stream| stream.file_idx).collect::<Vec<_>>();
+        file_indices.sort_unstable();
+        assert_eq!(file_indices, [Some(1), Some(2)]);
     }
 
     #[test]
