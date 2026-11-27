@@ -21,6 +21,7 @@ pub struct Metrics {
     http_duration: HistogramVec,
     http_requests: CounterVec,
     db_duration: HistogramVec,
+    db_pool_acquire_duration: Histogram,
     cache_duration: HistogramVec,
     cache_requests: CounterVec,
     cache_invalidations: CounterVec,
@@ -199,6 +200,15 @@ impl Metrics {
             GaugeVec::new(Opts::new("db_pool_connections", "Postgres connection pool state"), &["state"])
                 .expect("valid gauge");
         registry.register(Box::new(db_pool_connections.clone())).expect("unique metric");
+        let db_pool_acquire_duration = Histogram::with_opts(
+            HistogramOpts::new(
+                "db_pool_acquire_duration_seconds",
+                "Time spent acquiring a Postgres connection, including pool contention",
+            )
+            .buckets(DB_BUCKETS.to_vec()),
+        )
+        .expect("valid histogram");
+        registry.register(Box::new(db_pool_acquire_duration.clone())).expect("unique metric");
         let memory_cache_bytes =
             GaugeVec::new(Opts::new("memory_cache_bytes", "Weighted size of the in-memory caches"), &["cache"])
                 .expect("valid gauge");
@@ -232,6 +242,7 @@ impl Metrics {
                 &["operation"],
                 DB_BUCKETS,
             ),
+            db_pool_acquire_duration,
             cache_duration: histogram(
                 &registry,
                 "cache_operation_duration_seconds",
@@ -287,6 +298,10 @@ impl Metrics {
 
     pub fn observe_db(&self, operation: &str, elapsed: Duration) {
         self.db_duration.with_label_values(&[operation]).observe(elapsed.as_secs_f64());
+    }
+
+    pub fn observe_pool_acquire(&self, elapsed: Duration) {
+        self.db_pool_acquire_duration.observe(elapsed.as_secs_f64());
     }
 
     pub fn cache_timer(&self, operation: &str) -> SimpleTimer {
@@ -377,5 +392,19 @@ impl Metrics {
 impl Default for Metrics {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exposes_postgres_pool_acquisition_latency() {
+        let metrics = Metrics::new();
+        metrics.observe_pool_acquire(Duration::from_millis(25));
+        let rendered = metrics.render();
+        assert!(rendered.contains("db_pool_acquire_duration_seconds_count 1"));
+        assert!(rendered.contains("db_pool_acquire_duration_seconds_sum 0.025"));
     }
 }
