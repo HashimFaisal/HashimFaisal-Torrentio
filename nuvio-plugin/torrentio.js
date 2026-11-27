@@ -1,7 +1,9 @@
 /* Torrentio Local for Nuvio. Returns torrent metadata; Nuvio handles P2P playback. */
 var TMDB_BASE = "https://api.themoviedb.org/3";
 var INDEX_BASE = "https://therarbg.com/api/v1";
-var MAX_RESULTS = 20;
+var YTS_BASE = "https://movies-api.accel.li/api/v2";
+var EZTV_BASE = "https://eztvx.to/api";
+var MAX_RESULTS = 30;
 
 // Small in-memory TTL cache with in-flight request coalescing.
 // TMDB IDs are stable for hours; swarm counts are deliberately cached briefly.
@@ -33,6 +35,16 @@ function cached(key, ttlMs, loader) {
 }
 var TMDB_CACHE_MS = 6 * 60 * 60 * 1000;
 var INDEX_CACHE_MS = 90 * 1000;
+var PROVIDER_CACHE_MS = 2 * 60 * 1000;
+var providerHealth = Object.create(null);
+function recordProvider(name, startedAt, ok, detail) {
+  var state = providerHealth[name] || { requests: 0, successes: 0, failures: 0, results: 0, lastLatencyMs: 0, lastError: "" };
+  state.requests++;
+  state.lastLatencyMs = Math.max(0, Date.now() - startedAt);
+  if (ok) { state.successes++; state.results += detail || 0; state.lastError = ""; }
+  else { state.failures++; state.lastError = str(detail && detail.message ? detail.message : detail || "provider failed").slice(0, 180); }
+  providerHealth[name] = state;
+}
 
 function str(v) { return v === null || v === undefined ? "" : String(v); }
 function normalizeBtih(value) {
@@ -233,7 +245,10 @@ function mergeSameHash(existing, incoming) {
   merged.networkScore = Math.max(existing.networkScore, incoming.networkScore);
   merged.qualityScore = Math.max(existing.qualityScore || 0, incoming.qualityScore || 0);
   merged.swarmHealth = swarm.swarmHealth;
-  merged.name = "The RarBg · " + merged.quality + " · " + merged.seeders + " seeds" +
+  var providers = Array.from(new Set((existing.providers || [existing.provider || "The RarBg"]).concat(incoming.providers || [incoming.provider || "The RarBg"])));
+  merged.providers = providers;
+  merged.provider = providers.join(" + ");
+  merged.name = merged.provider + " · " + merged.quality + " · " + merged.seeders + " seeds" +
     (merged.qualityScore ? " · Q" + merged.qualityScore : "");
   merged.metadataConfidence = Math.max(existing.metadataConfidence, incoming.metadataConfidence);
   merged.metadataWarnings = (preferred.metadataWarnings || []).slice();
@@ -283,12 +298,13 @@ function toStreams(items, kind, season, episode) {
     var score = Number(item.qualityScore || 0);
     var candidate = {
       title: str(item.name) || "Torrent release",
-      name: "The RarBg · " + quality + " · " + seeds + " seeds" +
+      name: (str(item.provider) || "The RarBg") + " · " + quality + " · " + seeds + " seeds" +
         (score ? " · Q" + score : ""),
       url: magnet,
       quality: quality,
       size: bytes,
-      provider: "The RarBg",
+      provider: str(item.provider) || "The RarBg",
+      providers: [str(item.provider) || "The RarBg"],
       type: "torrent",
       seeders: seeds,
       peers: Number(item.leechers || 0),
@@ -322,6 +338,100 @@ function toStreams(items, kind, season, episode) {
   });
   return out.slice(0, MAX_RESULTS);
 }
+function magnetFor(hash, title) {
+  var normalized = normalizeBtih(hash);
+  if (!normalized) return "";
+  return "magnet:?xt=urn:btih:" + normalized + "&dn=" + encodeURIComponent(str(title)) +
+    "&tr=" + encodeURIComponent("udp://tracker.opentrackr.org:1337/announce") +
+    "&tr=" + encodeURIComponent("udp://tracker.torrent.eu.org:451/announce");
+}
+function imdbNumericId(imdbId) { return str(imdbId).replace(/^tt/i, ""); }
+async function queryYts(imdbId) {
+  return cached("provider:yts:" + imdbId, PROVIDER_CACHE_MS, async function() {
+    var url = YTS_BASE + "/list_movies.json?query_term=" + encodeURIComponent(imdbId) +
+      "&limit=50&sort_by=seeds&order_by=desc";
+    var body = await requestJson(url, "YTS");
+    if (!body || body.status !== "ok" || !body.data || !Array.isArray(body.data.movies)) throw new Error("Invalid YTS response");
+    var rows = [];
+    body.data.movies.forEach(function(movie) {
+      if (str(movie.imdb_code).toLowerCase() !== str(imdbId).toLowerCase()) return;
+      (Array.isArray(movie.torrents) ? movie.torrents : []).forEach(function(torrent) {
+        var hash = normalizeBtih(torrent.hash);
+        var title = str(movie.title_long || movie.title) + " " + str(torrent.quality) +
+          (torrent.type ? "." + str(torrent.type) : "");
+        rows.push({
+          name: title, infoHash: hash,
+          magnet: str(torrent.magnet_url) || magnetFor(hash, title),
+          seeders: torrent.seeds, leechers: torrent.peers, size: torrent.size_bytes,
+          resolution: torrent.quality, source: "YTS", codec: torrent.video_codec,
+          hdr: /hdr|dolby.?vision/i.test(title) ? "HDR" : "",
+          verifile: "unknown", provider: "YTS"
+        });
+      });
+    });
+    return rows;
+  });
+}
+async function queryEztv(imdbId) {
+  return cached("provider:eztv:" + imdbId, PROVIDER_CACHE_MS, async function() {
+    var url = EZTV_BASE + "/get-torrents?limit=100&page=1&imdb_id=" + encodeURIComponent(imdbNumericId(imdbId));
+    var body = await requestJson(url, "EZTV");
+    if (!body || !Array.isArray(body.torrents)) throw new Error("Invalid EZTV response");
+    return body.torrents.map(function(torrent) {
+      var title = str(torrent.filename || torrent.title);
+      return {
+        name: title, infoHash: normalizeBtih(torrent.hash), magnet: str(torrent.magnet_url),
+        seeders: torrent.seeds, leechers: torrent.peers, size: Number(torrent.size_bytes),
+        season: torrent.season, episode: torrent.episode, source: "EZTV", codec: "",
+        hdr: "", verifile: "unknown", provider: "EZTV"
+      };
+    });
+  });
+}
+async function queryRarbgAdaptive(imdbId, kind, season, episode) {
+  var thresholds = [10, 5, 1], collected = [], seen = Object.create(null);
+  for (var i = 0; i < thresholds.length; i++) {
+    var rows = await queryIndex(imdbId, kind, season, episode, thresholds[i]);
+    var batch = toStreams(rows, kind, season, episode);
+    for (var j = 0; j < batch.length; j++) {
+      var hash = batch[j].infoHash;
+      if (seen[hash] !== undefined) collected[seen[hash]] = mergeSameHash(collected[seen[hash]], batch[j]);
+      else { seen[hash] = collected.length; collected.push(batch[j]); }
+    }
+    if (collected.length >= 5) break;
+  }
+  return collected;
+}
+function mergeProviderResults(groups) {
+  var merged = [], indexes = Object.create(null);
+  groups.forEach(function(group) {
+    (group || []).forEach(function(stream) {
+      var hash = stream.infoHash;
+      if (!hash) return;
+      if (indexes[hash] !== undefined) merged[indexes[hash]] = mergeSameHash(merged[indexes[hash]], stream);
+      else { indexes[hash] = merged.length; merged.push(stream); }
+    });
+  });
+  merged.sort(function(a,b) {
+    if (b.networkScore !== a.networkScore) return b.networkScore - a.networkScore;
+    if (b.metadataConfidence !== a.metadataConfidence) return b.metadataConfidence - a.metadataConfidence;
+    if (b.seeders !== a.seeders) return b.seeders - a.seeders;
+    return b.qualityScore - a.qualityScore;
+  });
+  return merged.slice(0, MAX_RESULTS);
+}
+async function runProvider(name, loader) {
+  var started = Date.now();
+  try {
+    var streams = await loader();
+    recordProvider(name, started, true, streams.length);
+    return streams;
+  } catch (error) {
+    recordProvider(name, started, false, error);
+    console.warn("[Torrentio Local] provider " + name + ": " + (error && error.message ? error.message : error));
+    return [];
+  }
+}
 async function getStreams(tmdbId, mediaType, season, episode) {
   try {
     var kind = str(mediaType).toLowerCase();
@@ -330,32 +440,27 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         (isNaN(Number(season)) || isNaN(Number(episode)) ||
          Number(season) < 0 || Number(episode) < 1)) return [];
     var imdbId = await imdbFor(tmdbId, kind === "movie" ? "movie" : "tv");
-    // Adaptive swarm search: relax the seed threshold only when the stronger
-    // threshold does not produce enough usable results. This costs at most
-    // three index requests and avoids hiding viable torrents behind stale counts.
-    var thresholds = [10, 5, 1];
-    var collected = [], seen = Object.create(null);
-    for (var i = 0; i < thresholds.length; i++) {
-      var rows = await queryIndex(imdbId, kind, season, episode, thresholds[i]);
-      var batch = toStreams(rows, kind, season, episode);
-      for (var j = 0; j < batch.length; j++) {
-        var hash = batch[j].infoHash;
-        if (seen[hash] !== undefined) {
-          collected[seen[hash]] = mergeSameHash(collected[seen[hash]], batch[j]);
-        } else {
-          seen[hash] = collected.length;
-          collected.push(batch[j]);
-        }
-      }
-      if (collected.length >= 5) break;
+    // Independent catalogs run concurrently; provider failures are isolated.
+    var jobs = [runProvider("The RarBg", function() {
+      return queryRarbgAdaptive(imdbId, kind, season, episode);
+    })];
+    if (kind === "movie") {
+      jobs.push(runProvider("YTS", async function() {
+        return toStreams(await queryYts(imdbId), "movie", season, episode);
+      }));
+    } else {
+      jobs.push(runProvider("EZTV", async function() {
+        return toStreams(await queryEztv(imdbId), kind, season, episode);
+      }));
     }
-    collected.sort(function(a,b) {
-      if (b.networkScore !== a.networkScore) return b.networkScore - a.networkScore;
-      if (b.metadataConfidence !== a.metadataConfidence) return b.metadataConfidence - a.metadataConfidence;
-      if (b.seeders !== a.seeders) return b.seeders - a.seeders;
-      return b.qualityScore - a.qualityScore;
-    });
-    return collected.slice(0, MAX_RESULTS);
+    var groups = await Promise.all(jobs);
+    var combined = mergeProviderResults(groups);
+    console.info("[Torrentio Local] sources=" + groups.length + " results=" + combined.length +
+      " health=" + Object.keys(providerHealth).map(function(name) {
+        var state = providerHealth[name];
+        return name + ":" + state.successes + "/" + state.requests + "@" + state.lastLatencyMs + "ms";
+      }).join(","));
+    return combined;
   } catch (err) {
     console.error("[Torrentio Local] " + (err && err.message ? err.message : err));
     return [];
