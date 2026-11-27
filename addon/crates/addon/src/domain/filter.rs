@@ -231,5 +231,4 @@ mod tests {
         assert!(Quality::Unknown.matches(None, None));
         assert!(!Quality::Unknown.matches(Some("720p"), None));
     }
-
 }
