@@ -92,18 +92,20 @@ impl DirectSources {
         let payload: DirectApiResponse =
             serde_json::from_slice(&body).context("direct source API returned invalid JSON")?;
 
+        let allow_http = env::var("DIRECT_STREAM_ALLOW_HTTP")
+            .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
         let streams = payload.streams.into_iter()
-            .filter_map(validate_stream)
+            .filter_map(|stream| validate_stream(stream, allow_http))
             .take(20)
             .collect::<Vec<_>>();
         Ok(streams)
     }
 }
 
-fn validate_stream(mut stream: Stream) -> Option<Stream> {
+fn validate_stream(mut stream: Stream, allow_http: bool) -> Option<Stream> {
     let raw_url = stream.url.as_deref()?;
     let url = Url::parse(raw_url).ok()?;
-    if !matches!(url.scheme(), "http" | "https")
+    if (url.scheme() != "https" && !(allow_http && url.scheme() == "http"))
         || url.host_str().is_none()
         || !url.username().is_empty()
         || url.password().is_some()
@@ -162,15 +164,16 @@ mod tests {
 
     #[test]
     fn accepts_public_http_and_https_playback_urls() {
-        assert!(validate_stream(stream("https://cdn.example/video.m3u8")).is_some());
-        assert!(validate_stream(stream("http://media.example/video.mp4")).is_some());
+        assert!(validate_stream(stream("https://cdn.example/video.m3u8"), false).is_some());
+        assert!(validate_stream(stream("http://media.example/video.mp4"), false).is_none());
+        assert!(validate_stream(stream("http://media.example/video.mp4"), true).is_some());
     }
 
     #[test]
     fn rejects_non_http_schemes_and_credentials() {
-        assert!(validate_stream(stream("magnet:?xt=urn:btih:abc")).is_none());
-        assert!(validate_stream(stream("file:///etc/passwd")).is_none());
-        assert!(validate_stream(stream("https://user:pass@cdn.example/video.mp4")).is_none());
+        assert!(validate_stream(stream("magnet:?xt=urn:btih:abc"), true).is_none());
+        assert!(validate_stream(stream("file:///etc/passwd"), true).is_none());
+        assert!(validate_stream(stream("https://user:pass@cdn.example/video.mp4"), true).is_none());
     }
 
     #[test]
@@ -184,13 +187,13 @@ mod tests {
             "http://router.local/video.mp4",
             "http://service.internal/video.mp4",
         ] {
-            assert!(validate_stream(stream(url)).is_none(), "{url}");
+            assert!(validate_stream(stream(url), true).is_none(), "{url}");
         }
     }
 
     #[test]
     fn labels_direct_streams_for_ordering_and_diagnostics() {
-        let result = validate_stream(stream("https://cdn.example/video.mp4")).unwrap();
+        let result = validate_stream(stream("https://cdn.example/video.mp4"), false).unwrap();
         assert_eq!(result.name, "[HTTP] Example CDN\nDirect");
     }
 
