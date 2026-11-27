@@ -10,25 +10,31 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 
 ## Features
 
-- Movies and TV episodes.
+- Movies and exact TV episodes.
 - TMDB ID → IMDb ID resolution.
 - Exact IMDb/season/episode search through The RarBg API.
-- Validates magnet links and info hashes, removes duplicates, and skips zero-seeder results.
+- Verifies that the 40-character info hash matches the BTIH hash embedded in each magnet URI; malformed or mismatched pairs are discarded.
+- Rejects invalid/negative swarm counters, invalid sizes, duplicate hashes, and zero-seeder results.
 - Adaptive swarm search: tries 10 seeders first, then falls back to 5 and 1 only when fewer than five usable results are found.
 - Rejects multi-episode ranges and season packs to avoid starting the wrong file.
-- Returns quality, size, seeders, peers and info hash.
-- Ranks results with a constrained-network heuristic that balances swarm health, file size and resolution; 720p/1080p-sized releases can rank ahead of very large 4K files when the swarm is comparable. This is a source-selection heuristic, not a guarantee of playback speed.
+- Computes a swarm-health score using seed supply, leecher demand, seed/leecher ratio, file size, and resolution. Leecher count is treated as demand/competition, not as extra capacity.
+- Labels each result's swarm as healthy, contended, or thin for diagnostics.
+- Prefers manageable releases on constrained connections when their swarm health is competitive. This is a source-selection heuristic, not a guarantee of playback speed or a measurement of actual throughput.
 - Nuvio's built-in P2P engine handles playback. This plugin does not host, proxy, or download media.
 
 ## Local tests
+
+Run from this directory:
 
 ```bash
 node --check torrentio.js
 node selftest.js
 ```
 
+The self-test covers adaptive search, movie lookup, exact episode filtering, season-pack rejection, swarm-aware ordering, and magnet/info-hash integrity.
+
 ## Source and limitations
 
-The sole metadata source in this first version is [The RarBg public JSON API](https://therarbg.com/developers/). Its published unauthenticated quota is 30 requests/minute and 10,000/day. Coverage and seed counts depend on that service and the live swarm. TV packs are intentionally filtered; this improves episode precision but can reduce result counts.
+The sole metadata source in this version is [The RarBg public JSON API](https://therarbg.com/developers/). Coverage and seed counts depend on that service and the live swarm. TV packs are intentionally filtered; this improves episode precision but can reduce result counts.
 
 TMDB and The RarBg are third-party services and may change availability or response formats. Use torrents only where you have the rights and permission to access the content.
