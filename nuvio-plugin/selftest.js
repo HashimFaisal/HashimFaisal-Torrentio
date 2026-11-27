@@ -166,7 +166,7 @@ const {getStreams}=require("./torrentio.js");
     "unknown verification state must not be mistaken for a failed verdict");
   const invalidScore=metadataResults.find(x=>x.infoHash==="7".repeat(40));
   assert.ok(invalidScore, "a malformed optional quality score must not discard an otherwise valid stream");
-  assert.equal(invalidScore.qualityScore,0, "malformed quality scores must normalize to zero");
+  assert.equal(invalidScore.qualityScore,12, "a valid duplicate score may be retained while malformed-score warning remains");
   assert.ok(invalidScore.qualityScoreWarnings.includes("invalid-quality-score"),
     "malformed quality scores must be visible in diagnostics");
   assert.equal(invalidScore.qualityScore,12,
