@@ -163,6 +163,17 @@ const {getStreams}=require("./torrentio.js");
     "a provider with repeated failures must be skipped during its cooldown");
   forcedYtsStatus=0;
 
+  // After cooldown, concurrent lookups must share exactly one half-open probe.
+  const realNow = Date.now;
+  Date.now = () => realNow() + 61000;
+  calls.length=0;
+  await Promise.all([
+    getStreams("686868","movie",null,null),
+    getStreams("696969","movie",null,null)
+  ]);
+  Date.now = realNow;
+  assert.equal(calls.filter(x=>x.includes("movies-api.accel.li")).length,1,
+    "only one concurrent lookup may probe a recovering provider");
 
   console.log("PASS: multi-provider fan-out, provider isolation and circuit breaking, latency-driven network profiles, cross-source deduplication, swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, retry recovery, and metadata validation.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
