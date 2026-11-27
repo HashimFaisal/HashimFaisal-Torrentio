@@ -204,8 +204,40 @@ async function queryIndex(imdbId, kind, season, episode, minSeeders) {
     return data.results;
   });
 }
+function mergeSameHash(existing, incoming) {
+  // Same infoHash means the same torrent payload. Merge duplicate index rows
+  // instead of letting whichever threshold ran first win by accident.
+  var preferred = incoming.metadataConfidence > existing.metadataConfidence ? incoming : existing;
+  var swarm = incoming.networkScore > existing.networkScore ? incoming : existing;
+  var merged = Object.assign({}, preferred);
+  merged.seeders = Math.max(existing.seeders, incoming.seeders);
+  merged.peers = Math.max(existing.peers, incoming.peers);
+  merged.networkScore = Math.max(existing.networkScore, incoming.networkScore);
+  merged.swarmHealth = swarm.swarmHealth;
+  merged.metadataConfidence = Math.max(existing.metadataConfidence, incoming.metadataConfidence);
+  merged.metadataWarnings = Array.from(new Set(
+    (existing.metadataWarnings || []).concat(incoming.metadataWarnings || [])
+  ));
+  merged.source = preferred.source || existing.source || incoming.source || "";
+  merged.codec = preferred.codec || existing.codec || incoming.codec || "";
+  merged.hdr = preferred.hdr || existing.hdr || incoming.hdr || "";
+  merged.description = [merged.source, merged.codec, merged.hdr].filter(Boolean).join(" · ");
+  merged.duplicateCount = (existing.duplicateCount || 1) + (incoming.duplicateCount || 1);
+  var titles = (existing.alternateTitles || [existing.title])
+    .concat(incoming.alternateTitles || [incoming.title]).filter(Boolean);
+  merged.alternateTitles = Array.from(new Set(titles)).slice(0, 5);
+  if (existing.size !== incoming.size) {
+    merged.metadataWarnings.push("duplicate-size-conflict");
+    merged.metadataConfidence = Math.max(0, merged.metadataConfidence - 15);
+  }
+  if (existing.quality !== incoming.quality) {
+    merged.metadataWarnings.push("duplicate-quality-conflict");
+  }
+  return merged;
+}
+
 function toStreams(items, kind, season, episode) {
-  var seen = {}, out = [];
+  var seen = Object.create(null), out = [];
   for (var i = 0; i < items.length; i++) {
     var item = items[i] || {};
     var hash = str(item.infoHash).toLowerCase();
@@ -216,7 +248,7 @@ function toStreams(items, kind, season, episode) {
     var bytes = Number(item.size);
     if (!validHash(hash) || !magnetMatch ||
         magnetMatch[1].toLowerCase() !== hash ||
-        seen[hash] || !validCount(seeds) || seeds < 1 ||
+        !validCount(seeds) || seeds < 1 ||
         !validCount(leechers) ||
         !isFinite(bytes) || bytes <= 0 ||
         Math.floor(bytes) !== bytes || bytes > Number.MAX_SAFE_INTEGER) continue;
@@ -225,12 +257,11 @@ function toStreams(items, kind, season, episode) {
     // Discard clearly corrupt index sizes, rather than presenting multi-terabyte movie files.
     if (kind === "movie" && bytes > 200 * 1024 * 1024 * 1024) continue;
     if (kind !== "movie" && bytes > 1024 * 1024 * 1024 * 1024) continue;
-    seen[hash] = true;
     var metadata = releaseMetadata(item);
     var quality = metadata.quality;
     var detail = [str(item.source), str(item.codec), str(item.hdr)].filter(Boolean).join(" · ");
     var score = Number(item.qualityScore || 0);
-    out.push({
+    var candidate = {
       title: str(item.name) || "Torrent release",
       name: "The RarBg · " + quality + " · " + seeds + " seeds" +
         (score ? " · Q" + score : ""),
@@ -251,8 +282,16 @@ function toStreams(items, kind, season, episode) {
       metadataConfidence: metadata.confidence,
       metadataWarnings: metadata.warnings,
       verifile: str(item.verifile),
-      description: detail
-    });
+      description: detail,
+      duplicateCount: 1,
+      alternateTitles: [str(item.name) || "Torrent release"]
+    };
+    if (seen[hash] !== undefined) {
+      out[seen[hash]] = mergeSameHash(out[seen[hash]], candidate);
+    } else {
+      seen[hash] = out.length;
+      out.push(candidate);
+    }
   }
   // Prefer swarms that are more practical on constrained connections.
   out.sort(function(a,b) {
