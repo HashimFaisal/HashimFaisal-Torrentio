@@ -38,6 +38,8 @@ var INDEX_CACHE_MS = 90 * 1000;
 var PROVIDER_CACHE_MS = 2 * 60 * 1000;
 var PROVIDER_FAILURE_THRESHOLD = 3;
 var PROVIDER_COOLDOWN_MS = 60 * 1000;
+var PROVIDER_SLOW_THRESHOLD_MS = 9000;
+var PROVIDER_SLOW_COOLDOWN_MS = 30 * 1000;
 var providerHealth = Object.create(null);
 function providerState(name) {
   return providerHealth[name] || (providerHealth[name] = {
@@ -69,7 +71,14 @@ function recordProvider(name, startedAt, ok, detail) {
   if (ok) {
     state.successes++; state.results += detail || 0; state.lastError = "";
     state.lastErrorKind = ""; state.consecutiveFailures = 0;
-    state.circuitOpenUntil = 0; state.lastSuccessAt = Date.now();
+    state.lastSuccessAt = Date.now();
+    if (latency >= PROVIDER_SLOW_THRESHOLD_MS) {
+      state.circuitOpenUntil = Date.now() + PROVIDER_SLOW_COOLDOWN_MS;
+      state.lastErrorKind = "provider-slow-response";
+      state.lastError = "Catalog lookup took " + latency + "ms; temporary cooldown applied";
+    } else {
+      state.circuitOpenUntil = 0; state.lastErrorKind = ""; state.lastError = "";
+    }
   } else {
     state.failures++; state.windowFailures++; state.consecutiveFailures++;
     state.lastError = str(detail && detail.message ? detail.message : detail || "provider failed").slice(0, 180);
@@ -459,7 +468,7 @@ async function queryEztv(imdbId) {
     return body.torrents.map(function(torrent) {
       var title = str(torrent.filename || torrent.title);
       return {
-        name: title, infoHash: normalizeBtih(torrent.hash), magnet: str(torrent.magnet_url),
+        name: title, infoHash: normalizeBtih(torrent.hash), magnet: str(torrent.magnet_url) || magnetFor(torrent.hash, title),
         seeders: torrent.seeds, leechers: torrent.peers, size: Number(torrent.size_bytes),
         season: torrent.season, episode: torrent.episode, source: "EZTV", codec: "",
         hdr: "", verifile: "unknown", provider: "EZTV"
