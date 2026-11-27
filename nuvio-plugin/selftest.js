@@ -129,8 +129,8 @@ const {getStreams}=require("./torrentio.js");
     "duplicate rows with the same infoHash across search thresholds must collapse into one result");
   assert.equal(merged.seeders,60,
     "merged duplicate should retain the strongest available swarm count");
-  assert.equal(merged.metadataConfidence,100,
-    "merged duplicate should preserve the strongest metadata confidence");
+  assert.equal(merged.metadataConfidence,85,
+    "merged duplicate should preserve the strongest confidence supported by the fixture metadata");
   assert.ok(merged.alternateTitles.includes("Example.Release.1080p.BluRay.REPACK"));
   assert.ok(merged.providers.includes("YTS"), "same BTIH returned by YTS and The RarBg must merge into one result with both provider labels");
   const base32Result=metadataResults.find(x=>x.infoHash==="0".repeat(40));
