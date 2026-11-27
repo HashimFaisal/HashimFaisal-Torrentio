@@ -9,8 +9,10 @@ global.fetch = async (url) => {
   }
   const hash = (c) => c.repeat(40);
   const rows = mode==="movie" ? [
-    {name:"Inception 2160p",infoHash:hash("a"),magnet:"magnet:?xt=urn:btih:"+hash("a"),seeders:80,resolution:"2160p",size:1000000000},
-    {name:"Inception 720p",infoHash:hash("e"),magnet:"magnet:?xt=urn:btih:"+hash("e"),seeders:20,resolution:"720p",size:3000000000},
+    {name:"Inception 2160p",infoHash:hash("a"),magnet:"magnet:?xt=urn:btih:"+hash("a"),seeders:80,leechers:80,resolution:"2160p",size:1000000000},
+    {name:"Inception 720p",infoHash:hash("e"),magnet:"magnet:?xt=urn:btih:"+hash("e"),seeders:20,leechers:2,resolution:"720p",size:3000000000},
+    {name:"Inception 720p crowded",infoHash:hash("f"),magnet:"magnet:?xt=urn:btih:"+hash("f"),seeders:20,leechers:80,resolution:"720p",size:3000000000},
+    {name:"wrong magnet hash",infoHash:hash("g"),magnet:"magnet:?xt=urn:btih:"+hash("h"),seeders:99,leechers:0,resolution:"1080p",size:1000000000},
     {name:"bad",infoHash:"bad",magnet:"magnet:?xt=urn:btih:bad",seeders:10}
   ] : [
     {name:"Breaking.Bad.S01E01.Pilot.1080p",infoHash:hash("b"),magnet:"magnet:?xt=urn:btih:"+hash("b"),seeders:50,resolution:"1080p",season:1,episode:1},
@@ -22,7 +24,7 @@ global.fetch = async (url) => {
 const {getStreams}=require("./torrentio.js");
 (async()=>{
   let r=await getStreams("27205","movie",null,null);
-  assert.equal(r.length,2); assert.equal(r[0].quality,"720p"); assert.equal(r[0].infoHash,"e".repeat(40)); assert.equal(typeof r[0].size,"number"); assert.equal(r[1].quality,"2160p");
+  assert.equal(r.length,3); assert.equal(r[0].infoHash,"e".repeat(40)); assert.equal(typeof r[0].size,"number"); assert.equal(r[0].swarmHealth,"healthy"); assert.equal(r[1].infoHash,"a".repeat(40)); assert.equal(r[2].infoHash,"f".repeat(40)); assert.equal(r[2].swarmHealth,"thin"); assert.ok(!r.some(x=>x.infoHash==="g".repeat(40)), "rejects magnet/infoHash mismatch");
   assert.match(calls[1],/imdb=tt1375666/);
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
   mode="tv"; calls.length=0;
@@ -30,5 +32,5 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(r.length,1); assert.equal(r[0].infoHash,"b".repeat(40));
   assert.match(calls[1],/season=1&episode=1/);
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
-  console.log("PASS: movie lookup, magnet/hash validation, exact TV episode filtering, season-pack rejection.");
+  console.log("PASS: swarm-aware ranking, leechers treated as demand, magnet/infoHash integrity, exact TV episode filtering, season-pack rejection.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
