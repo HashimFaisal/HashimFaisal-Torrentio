@@ -3,6 +3,37 @@ var TMDB_BASE = "https://api.themoviedb.org/3";
 var INDEX_BASE = "https://therarbg.com/api/v1";
 var MAX_RESULTS = 20;
 
+// Small in-memory TTL cache with in-flight request coalescing.
+// TMDB IDs are stable for hours; swarm counts are deliberately cached briefly.
+var responseCache = Object.create(null);
+var CACHE_LIMIT = 128;
+function cached(key, ttlMs, loader) {
+  var now = Date.now();
+  var entry = responseCache[key];
+  if (entry && entry.expiresAt > now && Object.prototype.hasOwnProperty.call(entry, "value")) {
+    return Promise.resolve(entry.value);
+  }
+  if (entry && entry.pending) return entry.pending;
+  var pending = Promise.resolve().then(loader).then(function(value) {
+    responseCache[key] = { value: value, expiresAt: Date.now() + ttlMs };
+    var keys = Object.keys(responseCache);
+    if (keys.length > CACHE_LIMIT) {
+      keys.sort(function(a, b) {
+        return (responseCache[a].expiresAt || 0) - (responseCache[b].expiresAt || 0);
+      });
+      for (var i = 0; i < keys.length - CACHE_LIMIT; i++) delete responseCache[keys[i]];
+    }
+    return value;
+  }).catch(function(error) {
+    if (responseCache[key] && responseCache[key].pending === pending) delete responseCache[key];
+    throw error;
+  });
+  responseCache[key] = { pending: pending, expiresAt: now + ttlMs };
+  return pending;
+}
+var TMDB_CACHE_MS = 6 * 60 * 60 * 1000;
+var INDEX_CACHE_MS = 90 * 1000;
+
 function str(v) { return v === null || v === undefined ? "" : String(v); }
 function validHash(v) { return /^[a-f0-9]{40}$/i.test(str(v)); }
 function isPack(name) {
@@ -49,13 +80,15 @@ async function imdbFor(tmdbId, mediaType) {
   var kind = mediaType === "movie" ? "movie" : "tv";
   var id = str(tmdbId).replace(/^tmdb[:/]/i, "");
   if (!/^\d+$/.test(id)) throw new Error("Invalid TMDB id");
-  var url = TMDB_BASE + "/" + kind + "/" + encodeURIComponent(id) +
-    "/external_ids?api_key=" + encodeURIComponent(key);
-  var res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error("TMDB HTTP " + res.status);
-  var body = await res.json();
-  if (!body || !/^tt\d+$/.test(str(body.imdb_id))) throw new Error("IMDb id not found");
-  return body.imdb_id;
+  return cached("tmdb:" + kind + ":" + id, TMDB_CACHE_MS, async function() {
+    var url = TMDB_BASE + "/" + kind + "/" + encodeURIComponent(id) +
+      "/external_ids?api_key=" + encodeURIComponent(key);
+    var res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error("TMDB HTTP " + res.status);
+    var body = await res.json();
+    if (!body || !/^tt\d+$/.test(str(body.imdb_id))) throw new Error("IMDb id not found");
+    return body.imdb_id;
+  });
 }
 async function queryIndex(imdbId, kind, season, episode, minSeeders) {
   var params = "imdb=" + encodeURIComponent(imdbId) +
@@ -63,13 +96,18 @@ async function queryIndex(imdbId, kind, season, episode, minSeeders) {
     "&limit=50&clean=1&min_seeders=" + encodeURIComponent(minSeeders) + "&sort=seeders";
   if (kind !== "movie") params += "&season=" + encodeURIComponent(season) +
     "&episode=" + encodeURIComponent(episode);
-  var res = await fetch(INDEX_BASE + "/search/?" + params, {
-    headers: { Accept: "application/json" }
+  var cacheKey = "index:" + kind + ":" + imdbId + ":" +
+    (kind === "movie" ? "movie" : String(season) + ":" + String(episode)) +
+    ":seeders:" + String(minSeeders);
+  return cached(cacheKey, INDEX_CACHE_MS, async function() {
+    var res = await fetch(INDEX_BASE + "/search/?" + params, {
+      headers: { Accept: "application/json" }
+    });
+    if (!res.ok) throw new Error("The RarBg HTTP " + res.status);
+    var data = await res.json();
+    if (!data || !Array.isArray(data.results)) throw new Error("Invalid index response");
+    return data.results;
   });
-  if (!res.ok) throw new Error("The RarBg HTTP " + res.status);
-  var data = await res.json();
-  if (!data || !Array.isArray(data.results)) throw new Error("Invalid index response");
-  return data.results;
 }
 function toStreams(items, kind, season, episode) {
   var seen = {}, out = [];
