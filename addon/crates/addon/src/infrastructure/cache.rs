@@ -114,10 +114,14 @@ pub struct Cache {
     write_permits: Arc<Semaphore>,
 }
 
+fn megabytes_to_bytes(megabytes: u64) -> u64 {
+    megabytes.saturating_mul(1024 * 1024)
+}
+
 fn stream_cache_bytes() -> u64 {
     let megabytes =
         std::env::var("STREAM_CACHE_MB").ok().and_then(|value| value.parse().ok()).unwrap_or(DEFAULT_STREAM_CACHE_MB);
-    megabytes * 1024 * 1024
+    megabytes_to_bytes(megabytes)
 }
 
 impl Cache {
@@ -129,7 +133,7 @@ impl Cache {
             streams: Moka::<String, Timed<StreamEntry>>::builder()
                 .max_capacity(stream_bytes)
                 .weigher(|key, entry| {
-                    let weight = key.len()
+                    let weight = key.capacity()
                         + entry.value.packed.len()
                         + decoded_stream_bytes(&entry.value.decoded, entry.value.decoded.capacity());
                     u32::try_from(weight).unwrap_or(u32::MAX)
@@ -394,6 +398,12 @@ mod tests {
 
     async fn ttl_of(cache: &Cache, id: &str) -> Option<Duration> {
         cache.resolved.get(&format!("{RESOLVED_URL_KEY_PREFIX}:{id}")).await.map(|found| found.ttl)
+    }
+
+    #[test]
+    fn stream_cache_size_saturates_for_extreme_configuration() {
+        assert_eq!(megabytes_to_bytes(800), 800 * 1024 * 1024);
+        assert_eq!(megabytes_to_bytes(u64::MAX), u64::MAX);
     }
 
     #[tokio::test]
