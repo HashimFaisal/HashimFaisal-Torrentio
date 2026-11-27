@@ -17,11 +17,10 @@ use crate::{
     infrastructure::flight::{Limiter, NamedQueue},
     infrastructure::magnet::enrich_stream_sources,
     infrastructure::ratelimit::{Budget, Caller, RateLimiter},
-    providers::{Mochs, direct_sources::DirectSources, static_videos::is_static_url},
+    providers::{Mochs, static_videos::is_static_url},
 };
 
 const CACHE_MAX_AGE_EMPTY: u32 = 60;
-const DIRECT_CACHE_MAX_AGE: u32 = 60;
 const CATALOG_CACHE_MAX_AGE: u32 = 0;
 const STALE_REVALIDATE_AGE: u32 = 4 * 60 * 60;
 const STALE_ERROR_AGE: u32 = 7 * 24 * 60 * 60;
@@ -57,8 +56,6 @@ pub struct Addon {
     db_limiter: Limiter,
     rate_limiter: RateLimiter,
     cache_max_age: u32,
-    direct_sources: Option<DirectSources>,
-    direct_stream_only: bool,
 }
 
 impl Addon {
@@ -73,14 +70,6 @@ impl Addon {
             .and_then(|value| value.parse().ok())
             .filter(|age| *age != 0)
             .unwrap_or(DEFAULT_CACHE_MAX_AGE);
-        let direct_sources = DirectSources::from_env();
-        let direct_stream_only = std::env::var("DIRECT_STREAM_ONLY")
-            .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
-        if direct_stream_only && direct_sources.is_none() {
-            tracing::warn!(
-                "DIRECT_STREAM_ONLY is enabled but DIRECT_STREAM_API_URL is not configured; stream requests will return no direct sources"
-            );
-        }
         Self {
             repository,
             cache,
@@ -89,8 +78,6 @@ impl Addon {
             db_limiter: Limiter::new(DB_CONCURRENCY),
             rate_limiter,
             cache_max_age,
-            direct_sources,
-            direct_stream_only,
         }
     }
 
@@ -131,8 +118,6 @@ impl Addon {
         };
         let streams = filter::apply(&cached, config, content_type);
         let mut streams = sort_streams(streams, config);
-        // Prefer server-hosted HTTP sources without using peer counts as a signal.
-        streams.sort_by_key(|stream| !stream.name.starts_with("[HTTP]"));
         enrich_stream_sources(&mut streams);
         let streams = self.mochs.apply(streams, config).await;
         Ok(self.with_cache_params(streams))
@@ -147,38 +132,10 @@ impl Addon {
         self.cache
             .wrap_stream(id, || async {
                 self.rate_limiter.charge(caller, Budget::Miss);
-                let direct_future = async {
-                    match &self.direct_sources {
-                        Some(provider) => provider.resolve(content_type, id).await,
-                        None => Ok(Vec::new()),
-                    }
-                };
-                let (records_result, direct_result) = if self.direct_stream_only {
-                    // In direct-only mode, do not query torrent records or consult swarm data.
-                    (Ok(Vec::new()), direct_future.await)
-                } else {
-                    tokio::join!(self.db_limiter.run(self.records(content_type, id)), direct_future)
-                };
-
-                let mut streams = match direct_result {
-                    Ok(streams) => streams,
-                    Err(error) => {
-                        tracing::warn!(%error, "Direct HTTP source lookup failed; continuing with torrent sources");
-                        Vec::new()
-                    }
-                };
-
-                let torrent_streams = match records_result {
-                    Ok(records) => {
-                        tokio::task::spawn_blocking(move || to_streams(records)).await.map_err(HandlerError::failed)?
-                    }
-                    Err(error) if !streams.is_empty() => {
-                        tracing::warn!(%error, "Torrent database lookup failed; returning direct HTTP sources");
-                        Vec::new()
-                    }
-                    Err(error) => return Err(error),
-                };
-                streams.extend(torrent_streams);
+                let records = self.db_limiter.run(self.records(content_type, id)).await?;
+                let streams = tokio::task::spawn_blocking(move || to_streams(records))
+                    .await
+                    .map_err(HandlerError::failed)?;
                 if streams.is_empty() {
                     self.rate_limiter.charge(caller, Budget::Empty);
                 }
@@ -230,8 +187,6 @@ impl Addon {
             CACHE_MAX_AGE_EMPTY
         } else if streams.iter().all(|stream| stream.url.as_deref().is_some_and(is_static_url)) {
             0
-        } else if streams.iter().any(|stream| stream.name.starts_with("[HTTP]")) {
-            DIRECT_CACHE_MAX_AGE
         } else {
             self.cache_max_age
         };
