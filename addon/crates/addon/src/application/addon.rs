@@ -58,6 +58,7 @@ pub struct Addon {
     rate_limiter: RateLimiter,
     cache_max_age: u32,
     direct_sources: Option<DirectSources>,
+    direct_stream_only: bool,
 }
 
 impl Addon {
@@ -81,6 +82,8 @@ impl Addon {
             rate_limiter,
             cache_max_age,
             direct_sources: DirectSources::from_env(),
+            direct_stream_only: std::env::var("DIRECT_STREAM_ONLY")
+                .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes")),
         }
     }
 
@@ -143,10 +146,15 @@ impl Addon {
                         None => Ok(Vec::new()),
                     }
                 };
-                let (records_result, direct_result) = tokio::join!(
-                    self.db_limiter.run(self.records(content_type, id)),
-                    direct_future
-                );
+                let (records_result, direct_result) = if self.direct_stream_only {
+                    // In direct-only mode, do not query torrent records or consult swarm data.
+                    (Ok(Vec::new()), direct_future.await)
+                } else {
+                    tokio::join!(
+                        self.db_limiter.run(self.records(content_type, id)),
+                        direct_future
+                    )
+                };
 
                 let mut streams = match direct_result {
                     Ok(streams) => streams,
@@ -177,8 +185,7 @@ impl Addon {
             .await
     }
 
-    async fn records(&self, content_type: ContentType, id: &str) -> Result<Vec<Record>, HandlerError> {
-        let result = if content_type == ContentType::Movie {
+    async fn records(&self, content_type: ContentType, id: &str) -> Result<Vec<Record>, HandlerError> {        let result = if content_type == ContentType::Movie {
             self.movie_records(id).await
         } else {            self.series_records(id).await
         };
@@ -357,8 +364,7 @@ mod tests {
         }
 
         async fn item_meta(&self, item_id: &str, _: &str, _: Option<&str>) -> MochResult<ItemMeta> {
-            Err(match item_id {
-                "" => MochError::message("must not be called"),
+            Err(match item_id {                "" => MochError::message("must not be called"),
                 "bad-token" => CommonError::BadToken.into(),
                 "denied" => CommonError::AccessDenied.into(),
                 "boom" => MochError::message("boom"),                _ => CommonError::NotFound.into(),
@@ -538,7 +544,6 @@ mod tests {
         assert!(harness.rate_limited("tt3", &config).await);
         assert_eq!(harness.repository.lookups.load(Ordering::SeqCst), 2);
     }
-
     #[tokio::test]
     async fn empty_results_count_against_the_empty_budget() {        let harness = harness_with(FakeRepository::default(), enforcing(100, 1));
         let config = config_from("1.1.1.1", "");
