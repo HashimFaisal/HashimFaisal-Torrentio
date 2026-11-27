@@ -48,9 +48,9 @@ Initially support direct HTTPS progressive media and HLS/DASH URLs only when the
 ## Safety and reliability
 
 - Accept HTTPS by default; permit HTTP only through an explicit trusted-provider setting.
-- Reject localhost, private, link-local, multicast, and cloud-metadata destinations.
-- Re-check DNS/IP destinations after redirects to reduce SSRF and DNS-rebinding risk.
-- Limit redirects, response sizes, probe duration, and concurrent probes.
+- Reject literal localhost, private, link-local, multicast, and cloud-metadata IP destinations, plus local-only hostnames.
+- Disable redirects when calling the configured source API; the API endpoint is operator-configured and must be trusted.
+- The addon does not fetch returned playback URLs server-side. DNS resolution and nested HLS/DASH segment safety are therefore not verified by this adapter.
 - Do not bypass paywalls, authentication, DRM, geo restrictions, or access controls.
 - Use only public or owner-authorized provider APIs and media URLs.
 - Never treat a successful HEAD response alone as proof that the full video will play without buffering.
