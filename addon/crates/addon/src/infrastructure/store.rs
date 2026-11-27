@@ -127,7 +127,10 @@ impl Store {
         }
     }
 
-    pub async fn get_many<T: DeserializeOwned + Clone + Send + 'static>(&self, keys: &[String]) -> Result<Vec<Option<T>>> {
+    pub async fn get_many<T: DeserializeOwned + Clone + Send + 'static>(
+        &self,
+        keys: &[String],
+    ) -> Result<Vec<Option<T>>> {
         let stored: Vec<Stored> = self
             .collection
             .clone_with_type::<Stored>()
@@ -225,7 +228,6 @@ fn decode_value<T: DeserializeOwned>(value: Bson) -> Result<T> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::ordered_values;
@@ -234,10 +236,7 @@ mod tests {
     #[test]
     fn get_many_preserves_duplicate_key_positions() {
         let keys = vec!["same".to_owned(), "other".to_owned(), "same".to_owned()];
-        let values = HashMap::from([
-            ("same".to_owned(), 7),
-            ("other".to_owned(), 9),
-        ]);
+        let values = HashMap::from([("same".to_owned(), 7), ("other".to_owned(), 9)]);
 
         assert_eq!(ordered_values(&keys, &values), vec![Some(7), Some(9), Some(7)]);
     }
