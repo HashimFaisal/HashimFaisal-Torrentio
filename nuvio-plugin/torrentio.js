@@ -379,6 +379,9 @@ function mergeSameHash(existing, incoming) {
     (merged.qualityScore ? " · Q" + merged.qualityScore : "");
   merged.metadataConfidence = Math.max(existing.metadataConfidence, incoming.metadataConfidence);
   merged.metadataWarnings = (preferred.metadataWarnings || []).slice();
+  merged.qualityScoreWarnings = Array.from(new Set(
+    (existing.qualityScoreWarnings || []).concat(incoming.qualityScoreWarnings || [])
+  ));
   merged.source = preferred.source || existing.source || incoming.source || "";
   merged.codec = preferred.codec || existing.codec || incoming.codec || "";
   merged.hdr = preferred.hdr || existing.hdr || incoming.hdr || "";
