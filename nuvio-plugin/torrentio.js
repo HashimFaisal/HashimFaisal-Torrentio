@@ -74,6 +74,56 @@ function swarmHealth(seeds, leechers) {
   if (seeds >= 3 && seeds * 2 >= leechers) return "contended";
   return "thin";
 }
+
+// Normalize resolution from both structured API metadata and release title.
+// When they disagree, use the lower resolution so we never advertise an
+// uncertain release as higher quality than its own title supports.
+function resolutionRank(value) {
+  var q = str(value).toLowerCase();
+  if (/2160|4k|uhd/.test(q)) return 4;
+  if (/1440|2k/.test(q)) return 3;
+  if (/1080/.test(q)) return 3;
+  if (/720/.test(q)) return 2;
+  if (/480|sd/.test(q)) return 1;
+  return 0;
+}
+function resolutionLabel(rank) {
+  return rank >= 4 ? "2160p" : rank === 3 ? "1080p" :
+    rank === 2 ? "720p" : rank === 1 ? "480p" : "Unknown";
+}
+function releaseMetadata(item) {
+  var title = str(item.name);
+  var structured = resolutionRank(item.resolution);
+  var fromTitle = resolutionRank(title);
+  var conflict = structured > 0 && fromTitle > 0 && structured !== fromTitle;
+  var rank = structured && fromTitle ? Math.min(structured, fromTitle) : (structured || fromTitle);
+  var warnings = [];
+  if (conflict) warnings.push("resolution-conflict");
+  if (!str(item.source)) warnings.push("missing-source");
+  if (!str(item.codec)) warnings.push("missing-codec");
+  if (!str(item.hdr) && /hdr|dolby.?vision/i.test(title)) warnings.push("hdr-not-structured");
+  var confidence = 100;
+  if (conflict) confidence -= 35;
+  if (!str(item.source)) confidence -= 10;
+  if (!str(item.codec)) confidence -= 10;
+  if (!title || title.length < 8) confidence -= 20;
+  if (!rank) confidence -= 10;
+  return {
+    quality: resolutionLabel(rank),
+    confidence: Math.max(0, confidence),
+    warnings: warnings,
+    conflict: conflict
+  };
+}
+function validCount(value) {
+  var n = Number(value);
+  return isFinite(n) && n >= 0 && Math.floor(n) === n && n <= Number.MAX_SAFE_INTEGER;
+}
+function rejectedVerification(value) {
+  if (value === false || value === 0) return true;
+  var state = str(value).toLowerCase().trim();
+  return state === "failed" || state === "false" || state === "invalid" || state === "0";
+}
 // Idempotent GET recovery for temporary upstream/network failures.
 // Bounded retries prevent request storms and permanent 4xx responses fail fast.
 var REQUEST_MAX_ATTEMPTS = 3;
@@ -155,21 +205,23 @@ function toStreams(items, kind, season, episode) {
     var hash = str(item.infoHash).toLowerCase();
     var magnet = str(item.magnet);
     var magnetMatch = magnet.match(/(?:^|[?&])xt=urn:btih:([a-f0-9]{40})(?:&|$)/i);
-    var seeds = Number(item.seeders || 0);
-    var leechers = Number(item.leechers || 0);
-    var bytes = Number(item.size || 0);
+    var seeds = Number(item.seeders);
+    var leechers = Number(item.leechers);
+    var bytes = Number(item.size);
     if (!validHash(hash) || !magnetMatch ||
         magnetMatch[1].toLowerCase() !== hash ||
-        seen[hash] || !isFinite(seeds) || seeds < 1 ||
-        !isFinite(leechers) || leechers < 0 ||
-        !isFinite(bytes) || bytes <= 0) continue;
-    if (str(item.verifile).toLowerCase() === "failed") continue;
+        seen[hash] || !validCount(seeds) || seeds < 1 ||
+        !validCount(leechers) ||
+        !isFinite(bytes) || bytes <= 0 ||
+        Math.floor(bytes) !== bytes || bytes > Number.MAX_SAFE_INTEGER) continue;
+    if (rejectedVerification(item.verifile)) continue;
     if (kind !== "movie" && !exactEpisode(item, season, episode)) continue;
     // Discard clearly corrupt index sizes, rather than presenting multi-terabyte movie files.
     if (kind === "movie" && bytes > 200 * 1024 * 1024 * 1024) continue;
     if (kind !== "movie" && bytes > 1024 * 1024 * 1024 * 1024) continue;
     seen[hash] = true;
-    var quality = str(item.resolution) || "Torrent";
+    var metadata = releaseMetadata(item);
+    var quality = metadata.quality;
     var detail = [str(item.source), str(item.codec), str(item.hdr)].filter(Boolean).join(" · ");
     var score = Number(item.qualityScore || 0);
     out.push({
@@ -190,6 +242,8 @@ function toStreams(items, kind, season, episode) {
       qualityScore: score,
       networkScore: weakNetworkScore(seeds, leechers, bytes, quality),
       swarmHealth: swarmHealth(seeds, leechers),
+      metadataConfidence: metadata.confidence,
+      metadataWarnings: metadata.warnings,
       verifile: str(item.verifile),
       description: detail
     });
@@ -197,6 +251,7 @@ function toStreams(items, kind, season, episode) {
   // Prefer swarms that are more practical on constrained connections.
   out.sort(function(a,b) {
     if (b.networkScore !== a.networkScore) return b.networkScore - a.networkScore;
+    if (b.metadataConfidence !== a.metadataConfidence) return b.metadataConfidence - a.metadataConfidence;
     if (b.seeders !== a.seeders) return b.seeders - a.seeders;
     return b.qualityScore - a.qualityScore;
   });
@@ -228,6 +283,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
     }
     collected.sort(function(a,b) {
       if (b.networkScore !== a.networkScore) return b.networkScore - a.networkScore;
+      if (b.metadataConfidence !== a.metadataConfidence) return b.metadataConfidence - a.metadataConfidence;
       if (b.seeders !== a.seeders) return b.seeders - a.seeders;
       return b.qualityScore - a.qualityScore;
     });
