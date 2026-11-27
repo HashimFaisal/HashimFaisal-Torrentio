@@ -103,13 +103,13 @@ async fn run() -> anyhow::Result<()> {
         .map_or(Ok(IpAddr::V6(Ipv6Addr::UNSPECIFIED)), |host| host.parse())
         .context("HOST is not an ip address")?;
     let listener = TcpListener::bind(SocketAddr::new(host, port)).await?;
-    if !direct_stream_only {
+    if direct_stream_only {
+        tracing::info!(port, "Started addon in direct-only mode");
+    } else {
         tokio::spawn(async move {
             init_best_trackers().await;
             tracing::info!(port, "Started addon");
         });
-    } else {
-        tracing::info!(port, "Started addon in direct-only mode");
     }
     axum::serve(
         listener,
