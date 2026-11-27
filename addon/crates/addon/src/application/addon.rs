@@ -73,6 +73,12 @@ impl Addon {
             .and_then(|value| value.parse().ok())
             .filter(|age| *age != 0)
             .unwrap_or(DEFAULT_CACHE_MAX_AGE);
+        let direct_sources = DirectSources::from_env();
+        let direct_stream_only = std::env::var("DIRECT_STREAM_ONLY")
+            .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
+        if direct_stream_only && direct_sources.is_none() {
+            tracing::warn!("DIRECT_STREAM_ONLY is enabled but DIRECT_STREAM_API_URL is not configured; stream requests will return no direct sources");
+        }
         Self {
             repository,
             cache,
@@ -81,9 +87,8 @@ impl Addon {
             db_limiter: Limiter::new(DB_CONCURRENCY),
             rate_limiter,
             cache_max_age,
-            direct_sources: DirectSources::from_env(),
-            direct_stream_only: std::env::var("DIRECT_STREAM_ONLY")
-                .is_ok_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes")),
+            direct_sources,
+            direct_stream_only,
         }
     }
 
