@@ -59,7 +59,7 @@ global.fetch = async (url) => {
   const rows = mode==="metadata" ? [
     {name:"Example.Release.1080p.BluRay",infoHash:hash("2"),magnet:"magnet:?xt=urn:btih:"+hash("2"),seeders:25,leechers:2,resolution:"1080p",size:2200000000,source:"BluRay",codec:"x265"},
     {name:"Example.Release.1080p.BluRay.REPACK",infoHash:hash("2"),magnet:"magnet:?xt=urn:btih:"+hash("2"),seeders:60,leechers:4,resolution:"1080p",size:2200000000},
-    {name:"Base32 hash release 720p",infoHash:"A".repeat(32),magnet:"magnet:?xt=urn:btih:"+"A".repeat(32),seeders:18,leechers:2,resolution:"720p",size:1200000000},
+    {name:"Base32.hash.release.720p.BluRay.x265.HDR10+.Atmos",infoHash:"A".repeat(32),magnet:"magnet:?xt=urn:btih:"+"A".repeat(32),seeders:18,leechers:2,resolution:"720p",size:1200000000},
     {name:"Example.Release.720p.WEB",infoHash:hash("3"),magnet:"magnet:?xt=urn:btih:"+hash("3"),seeders:500,leechers:1,resolution:"2160p",size:900000000,source:"WEB",codec:"x264"},
     {name:"fractional swarm",infoHash:hash("4"),magnet:"magnet:?xt=urn:btih:"+hash("4"),seeders:3.5,leechers:1,resolution:"1080p",size:900000000},
     {name:"verification unavailable",infoHash:hash("5"),magnet:"magnet:?xt=urn:btih:"+hash("5"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:"unknown"},
@@ -147,6 +147,11 @@ const {getStreams}=require("./torrentio.js");
   const base32Result=metadataResults.find(x=>x.infoHash==="0".repeat(40));
   assert.ok(base32Result,
     "Base32 BTIH infoHash and magnet should normalize to the same canonical hexadecimal hash");
+  assert.equal(base32Result.source,"BluRay","release source should be inferred from a recognized title tag");
+  assert.equal(base32Result.codec,"HEVC","video codec should be normalized from x265 title tags");
+  assert.equal(base32Result.hdr,"HDR10+","HDR format should be inferred without claiming verified metadata");
+  assert.equal(base32Result.audio,"Atmos","audio format should be inferred from release title tags");
+  assert.ok(base32Result.metadataWarnings.includes("codec-inferred-from-title"));
   const mismatch=metadataResults.find(x=>x.infoHash==="3".repeat(40));
   assert.ok(mismatch);
   assert.equal(mismatch.quality,"720p",
