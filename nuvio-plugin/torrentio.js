@@ -379,7 +379,7 @@ async function imdbFor(tmdbId, mediaType) {
     var body = await requestJson(url, "TMDB");
     if (!body || !/^tt\d+$/.test(str(body.imdb_id))) throw new Error("IMDb id not found");
     return body.imdb_id;
-  });
+  }, TMDB_STALE_MS);
 }
 async function queryIndex(imdbId, kind, season, episode, minSeeders) {
   var params = "imdb=" + encodeURIComponent(imdbId) +
@@ -394,7 +394,7 @@ async function queryIndex(imdbId, kind, season, episode, minSeeders) {
     var data = await requestJson(INDEX_BASE + "/search/?" + params, "The RarBg");
     if (!data || !Array.isArray(data.results)) throw new Error("Invalid index response");
     return data.results;
-  });
+  }, INDEX_STALE_MS);
 }
 function mergeSameHash(existing, incoming) {
   // Same infoHash means the same torrent payload. Merge duplicate index rows
@@ -545,7 +545,7 @@ async function queryYts(imdbId) {
       });
     });
     return rows;
-  });
+  }, PROVIDER_STALE_MS);
 }
 async function queryEztv(imdbId) {
   return cached("provider:eztv:" + imdbId, PROVIDER_CACHE_MS, async function() {
@@ -561,7 +561,7 @@ async function queryEztv(imdbId) {
         hdr: "", verifile: "unknown", provider: "EZTV"
       };
     });
-  });
+  }, PROVIDER_STALE_MS);
 }
 function retryableLookupError(error) {
   var message = str(error && error.message ? error.message : error);
