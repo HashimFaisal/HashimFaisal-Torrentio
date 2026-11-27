@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{borrow::Cow, sync::LazyLock};
 
 use regex::Regex;
 
@@ -36,7 +36,7 @@ pub fn parse_size(text: &str) -> u64 {
     } else {
         1.0
     };
-    let number: String = text.replace(',', "");
+    let number = if text.contains(',') { Cow::Owned(text.replace(',', "")) } else { Cow::Borrowed(text) };
     (parse_float_prefix(&number) * scale).floor() as u64
 }
 
