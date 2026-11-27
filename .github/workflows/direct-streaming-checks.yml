@@ -13,7 +13,6 @@ on:
       - direct-streaming
     paths:
       - "addon/**"
-      - "docs/DIRECT_STREAMING_ENGINE.md"
 
 jobs:
   checks:
