@@ -9,33 +9,64 @@ var MAX_RESULTS = 30;
 // TMDB IDs are stable for hours; swarm counts are deliberately cached briefly.
 var responseCache = Object.create(null);
 var CACHE_LIMIT = 128;
-function cached(key, ttlMs, loader) {
+function cached(key, ttlMs, loader, staleMs) {
   var now = Date.now();
   var entry = responseCache[key];
-  if (entry && entry.expiresAt > now && Object.prototype.hasOwnProperty.call(entry, "value")) {
-    return Promise.resolve(entry.value);
+  if (entry && Object.prototype.hasOwnProperty.call(entry, "value")) {
+    if (entry.expiresAt > now) return Promise.resolve(entry.value);
+    // Brief stale-while-revalidate avoids making Nuvio wait on an upstream
+    // catalog when a recently good result is already available.
+    if (entry.staleUntil > now) {
+      if (!entry.pending && (!entry.retryAfter || entry.retryAfter <= now)) {
+        refreshCacheEntry(key, ttlMs, staleMs, loader, entry).catch(function() {});
+      }
+      return Promise.resolve(entry.value);
+    }
   }
   if (entry && entry.pending) return entry.pending;
+  return refreshCacheEntry(key, ttlMs, staleMs, loader, entry);
+}
+function refreshCacheEntry(key, ttlMs, staleMs, loader, previous) {
+  var staleValue = previous && Object.prototype.hasOwnProperty.call(previous, "value")
+    ? previous.value : undefined;
+  var hadStaleValue = previous && Object.prototype.hasOwnProperty.call(previous, "value");
   var pending = Promise.resolve().then(loader).then(function(value) {
-    responseCache[key] = { value: value, expiresAt: Date.now() + ttlMs };
+    var now = Date.now();
+    responseCache[key] = {
+      value: value, expiresAt: now + ttlMs,
+      staleUntil: now + ttlMs + Math.max(0, staleMs || 0), pending: null, retryAfter: 0
+    };
     var keys = Object.keys(responseCache);
     if (keys.length > CACHE_LIMIT) {
       keys.sort(function(a, b) {
-        return (responseCache[a].expiresAt || 0) - (responseCache[b].expiresAt || 0);
+        return (responseCache[a].staleUntil || responseCache[a].expiresAt || 0) -
+          (responseCache[b].staleUntil || responseCache[b].expiresAt || 0);
       });
       for (var i = 0; i < keys.length - CACHE_LIMIT; i++) delete responseCache[keys[i]];
     }
     return value;
   }).catch(function(error) {
+    if (hadStaleValue) {
+      responseCache[key] = {
+        value: staleValue, expiresAt: 0,
+        staleUntil: previous.staleUntil || Date.now() + Math.max(0, staleMs || 0),
+        pending: null, retryAfter: Date.now() + 15000
+      };
+      return staleValue;
+    }
     if (responseCache[key] && responseCache[key].pending === pending) delete responseCache[key];
     throw error;
   });
-  responseCache[key] = { pending: pending, expiresAt: now + ttlMs };
+  responseCache[key] = {
+    value: staleValue, expiresAt: previous && previous.expiresAt || 0,
+    staleUntil: previous && previous.staleUntil || 0,
+    pending: pending, retryAfter: 0
+  };
   return pending;
 }
-var TMDB_CACHE_MS = 6 * 60 * 60 * 1000;
-var INDEX_CACHE_MS = 90 * 1000;
-var PROVIDER_CACHE_MS = 2 * 60 * 1000;
+var TMDB_CACHE_MS = 6 * 60 * 60 * 1000;\nvar TMDB_STALE_MS = 24 * 60 * 60 * 1000;
+var INDEX_CACHE_MS = 90 * 1000;\nvar INDEX_STALE_MS = 2 * 60 * 1000;
+var PROVIDER_CACHE_MS = 2 * 60 * 1000;\nvar PROVIDER_STALE_MS = 2 * 60 * 1000;
 var PROVIDER_FAILURE_THRESHOLD = 3;
 var PROVIDER_COOLDOWN_MS = 60 * 1000;
 var PROVIDER_SLOW_THRESHOLD_MS = 9000;
