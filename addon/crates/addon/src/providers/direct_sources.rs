@@ -111,14 +111,12 @@ fn validate_stream(mut stream: Stream) -> Option<Stream> {
         return None;
     }
 
-    stream.url = Some(url.into());
-    if !stream.name.starts_with("[HTTP]") {
-        stream.name = if stream.name.trim().is_empty() {
-            "[HTTP] Direct source".to_owned()
-        } else {
-            format!("[HTTP] {}", stream.name.trim())
-        };
-    }
+    stream.url = Some(url.to_string());
+    let mut name_parts = stream.name.splitn(2, '\\n');
+    let provider_name = name_parts.next().unwrap_or_default().trim();
+    let quality = name_parts.next().unwrap_or("Direct").trim();
+    let provider_name = if provider_name.is_empty() { "Direct source" } else { provider_name };
+    stream.name = format!("[HTTP] {provider_name}\\n{quality}");
     Some(stream)
 }
 
