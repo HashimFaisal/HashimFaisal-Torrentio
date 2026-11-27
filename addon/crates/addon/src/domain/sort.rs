@@ -114,6 +114,13 @@ fn sort_by_size(streams: Vec<Stream>) -> Vec<Stream> {
     keyed.into_iter().map(|(_, stream)| stream).collect()
 }
 
+fn sort_by_seeders(streams: Vec<Stream>) -> Vec<Stream> {
+    let mut keyed: Vec<(u64, Stream)> =
+        streams.into_iter().map(|stream| (extract_seeders(&stream.title), stream)).collect();
+    keyed.sort_by_key(|entry| std::cmp::Reverse(entry.0));
+    keyed.into_iter().map(|(_, stream)| stream).collect()
+}
+
 fn sort_by_quality(streams: Vec<Stream>, nested_by_size: bool) -> Vec<Stream> {
     let mut groups: Vec<Vec<Stream>> = Vec::new();
     let mut group_indices: HashMap<String, usize> = HashMap::new();
@@ -131,7 +138,7 @@ fn sort_by_quality(streams: Vec<Stream>, nested_by_size: bool) -> Vec<Stream> {
         .into_iter()
         .flat_map(|(_, index)| {
             let members = std::mem::take(&mut groups[index]);
-            if nested_by_size { sort_by_size(members) } else { members }
+            if nested_by_size { sort_by_size(members) } else { sort_by_seeders(members) }
         })
         .collect()
 }
@@ -254,15 +261,33 @@ mod tests {
     }
 
     #[test]
-    fn quality_grouping_preserves_order_within_each_bucket() {
+    fn quality_groups_sort_by_seeders_descending_and_keep_ties_stable() {
         let config = Config::parse("");
         let streams = vec![
-            stream("T\n1080p", "first\n👤 20"),
-            stream("T\n720p", "lower\n👤 30"),
-            stream("T\n1080p", "second\n👤 10"),
+            stream("T\n1080p", "few\n👤 4"),
+            stream("T\n1080p", "many\n👤 40"),
+            stream("T\n1080p", "tie-first\n👤 40"),
+            stream("T\n720p", "lower\n👤 100"),
         ];
         let titles: Vec<String> = sort_streams(streams, &config).into_iter().map(|stream| stream.title).collect();
-        assert_eq!(titles, vec!["first\n👤 20", "second\n👤 10", "lower\n👤 30"]);
+        assert_eq!(titles, vec![
+            "many\n👤 40",
+            "tie-first\n👤 40",
+            "few\n👤 4",
+            "lower\n👤 100",
+        ]);
+    }
+
+    #[test]
+    fn quality_size_sort_still_uses_file_size_within_quality() {
+        let config = Config::parse("sort=qualitysize");
+        let streams = vec![
+            stream("T\n1080p", "small\n💾 700 MB"),
+            stream("T\n1080p", "large\n💾 4.2 GB"),
+            stream("T\n720p", "lower\n💾 20 GB"),
+        ];
+        let titles: Vec<String> = sort_streams(streams, &config).into_iter().map(|stream| stream.title).collect();
+        assert_eq!(titles, vec!["large\n💾 4.2 GB", "small\n💾 700 MB", "lower\n💾 20 GB"]);
     }
 
     #[test]
