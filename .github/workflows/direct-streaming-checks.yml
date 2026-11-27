@@ -8,6 +8,7 @@ on:
     paths:
       - "addon/**"
       - ".github/workflows/direct-streaming-checks.yml"
+      - ".github/workflows/manual-benchmark.yml"
   pull_request:
     branches:
       - direct-streaming
