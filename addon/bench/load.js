@@ -26,6 +26,10 @@ if (!targets.length || targets.some(target => target.split(/\s+/).length !== 2))
 export const options = {
   discardResponseBodies: true,
   summaryTrendStats: ['min', 'med', 'avg', 'p(90)', 'p(95)', 'p(99)', 'max'],
+  thresholds: {
+    checks: ['rate>0.99'],
+    http_req_failed: ['rate<0.01'],
+  },
   scenarios: {
     run: mode === 'hot'
       ? { executor: 'constant-vus', vus, duration: __ENV.DURATION || '20s' }
