@@ -5,9 +5,27 @@ let transientFailures = 0;
 let forcedIndexStatus = 0;
 let forcedYtsStatus = 0;
 let forcedEztvStatus = 0;
+let activeIndexRequests = 0;
+let maxConcurrentIndexRequests = 0;
 const calls = [];
 global.fetch = async (url) => {
   calls.push(String(url));
+  if (String(url).includes("/search/?") && mode === "fallback-parallel") {
+    activeIndexRequests++;
+    maxConcurrentIndexRequests = Math.max(maxConcurrentIndexRequests, activeIndexRequests);
+    await new Promise(resolve => setTimeout(resolve, 25));
+    activeIndexRequests--;
+    const threshold = Number((String(url).match(/min_seeders=(\\d+)/) || [])[1]);
+    const count = threshold === 10 ? 2 : threshold === 5 ? 3 : 2;
+    const base = threshold === 10 ? 1 : threshold === 5 ? 3 : 6;
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+      const hash = String(base + i).repeat(40);
+      rows.push({name:"Parallel fallback " + hash.slice(0,1) + " 1080p",infoHash:hash,
+        magnet:"magnet:?xt=urn:btih:" + hash,seeders:20,leechers:2,size:900000000,resolution:"1080p"});
+    }
+    return {ok:true,status:200,json:async()=>({results:rows})};
+  }
   if (String(url).includes("/search/?") && forcedIndexStatus) {
     return {ok:false,status:forcedIndexStatus,json:async()=>({})};
   }
@@ -125,6 +143,14 @@ const {getStreams}=require("./torrentio.js");
   ]);
   assert.equal(calls.length-beforeConcurrent,5,
     "two simultaneous lookups should share one TMDB request, three index requests, and one YTS request");
+
+  // A sparse high-seeder result should trigger both fallback tiers concurrently.
+  mode="fallback-parallel"; calls.length=0; maxConcurrentIndexRequests=0;
+  const parallelFallback = await getStreams("767676","movie",null,null);
+  assert.equal(parallelFallback.length,7);
+  assert.ok(maxConcurrentIndexRequests >= 2,
+    "the 5-seeder and 1-seeder fallback requests must overlap rather than run serially");
+  assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\\d+)/)||[])[1])),[10,5,1]);
 
   // Two transient 503 responses should recover on the third attempt.
   mode="movie"; calls.length=0; transientFailures=2;
