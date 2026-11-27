@@ -32,5 +32,19 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(r.length,1); assert.equal(r[0].infoHash,"b".repeat(40));
   assert.match(calls[1],/season=1&episode=1/);
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
-  console.log("PASS: swarm-aware ranking, leechers treated as demand, magnet/infoHash integrity, exact TV episode filtering, season-pack rejection.");
+
+  // Repeating the same lookup should be served from the short-lived cache.
+  const beforeRepeat = calls.length;
+  const repeated = await getStreams("1396","tv",1,1);
+  assert.equal(repeated.length,1);
+  assert.equal(calls.length,beforeRepeat,"cached lookup must not issue duplicate network requests");
+
+  // Concurrent identical lookups should share in-flight TMDB and index requests.
+  const beforeConcurrent = calls.length;
+  await Promise.all([
+    getStreams("27205","movie",null,null),
+    getStreams("27205","movie",null,null)
+  ]);
+  assert.equal(calls.length,beforeConcurrent,"concurrent lookups must be coalesced");
+  console.log("PASS: swarm-aware ranking, magnet integrity, exact episode filtering, TTL cache, and concurrent request coalescing.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
