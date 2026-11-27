@@ -31,10 +31,10 @@ async function imdbFor(tmdbId, mediaType) {
   if (!body || !/^tt\d+$/.test(str(body.imdb_id))) throw new Error("IMDb id not found");
   return body.imdb_id;
 }
-async function queryIndex(imdbId, kind, season, episode) {
+async function queryIndex(imdbId, kind, season, episode, minSeeders) {
   var params = "imdb=" + encodeURIComponent(imdbId) +
     "&category=" + (kind === "movie" ? "movies" : "tv") +
-    "&limit=50&clean=1&min_seeders=5&sort=seeders";
+    "&limit=50&clean=1&min_seeders=" + encodeURIComponent(minSeeders) + "&sort=seeders";
   if (kind !== "movie") params += "&season=" + encodeURIComponent(season) +
     "&episode=" + encodeURIComponent(episode);
   var res = await fetch(INDEX_BASE + "/search/?" + params, {
@@ -100,8 +100,28 @@ async function getStreams(tmdbId, mediaType, season, episode) {
         (isNaN(Number(season)) || isNaN(Number(episode)) ||
          Number(season) < 0 || Number(episode) < 1)) return [];
     var imdbId = await imdbFor(tmdbId, kind === "movie" ? "movie" : "tv");
-    var rows = await queryIndex(imdbId, kind, season, episode);
-    return toStreams(rows, kind, season, episode);
+    // Adaptive swarm search: relax the seed threshold only when the stronger
+    // threshold does not produce enough usable results. This costs at most
+    // three index requests and avoids hiding viable torrents behind stale counts.
+    var thresholds = [10, 5, 1];
+    var collected = [], seen = {};
+    for (var i = 0; i < thresholds.length; i++) {
+      var rows = await queryIndex(imdbId, kind, season, episode, thresholds[i]);
+      var batch = toStreams(rows, kind, season, episode);
+      for (var j = 0; j < batch.length; j++) {
+        if (!seen[batch[j].infoHash]) {
+          seen[batch[j].infoHash] = true;
+          collected.push(batch[j]);
+        }
+      }
+      if (collected.length >= 5) break;
+    }
+    collected.sort(function(a,b) {
+      if (b.seeders !== a.seeders) return b.seeders - a.seeders;
+      if (b.qualityScore !== a.qualityScore) return b.qualityScore - a.qualityScore;
+      return b.peers - a.peers;
+    });
+    return collected.slice(0, MAX_RESULTS);
   } catch (err) {
     console.error("[Torrentio Local] " + (err && err.message ? err.message : err));
     return [];
