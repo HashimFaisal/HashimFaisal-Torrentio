@@ -1,14 +1,14 @@
 {
   "name": "Torrentio Local",
-  "version": "0.1.4",
-  "description": "Local Nuvio plugin for quality-ranked movie and exact-episode torrent metadata.",
+  "version": "0.1.5",
+  "description": "Local Nuvio plugin with swarm-health ranking and verified magnet metadata.",
   "author": "HashimFaisal",
   "scrapers": [
     {
       "id": "torrentio-local",
       "name": "Torrentio Local",
-      "description": "Movie and TV torrent results via The RarBg public API; playback uses Nuvio P2P.",
-      "version": "0.1.4",
+      "description": "Swarm-aware movie and TV torrent discovery; validates magnet hashes and ranks source health. Nuvio handles P2P playback.",
+      "version": "0.1.5",
       "filename": "torrentio.js",
       "supportedTypes": [
         "movie",
