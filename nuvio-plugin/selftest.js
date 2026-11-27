@@ -15,7 +15,7 @@ global.fetch = async (url) => {
     maxConcurrentIndexRequests = Math.max(maxConcurrentIndexRequests, activeIndexRequests);
     await new Promise(resolve => setTimeout(resolve, 25));
     activeIndexRequests--;
-    const threshold = Number((String(url).match(/min_seeders=(\\d+)/) || [])[1]);
+    const threshold = Number((String(url).match(/min_seeders=(\d+)/) || [])[1]);
     const count = threshold === 10 ? 2 : threshold === 5 ? 3 : 2;
     const base = threshold === 10 ? 1 : threshold === 5 ? 3 : 6;
     const rows = [];
