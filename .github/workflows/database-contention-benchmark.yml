@@ -1,0 +1,127 @@
+name: Torrent Engine Database Contention Benchmark
+
+on:
+  push:
+    branches:
+      - direct-streaming
+    paths:
+      - ".github/workflows/database-contention-benchmark.yml"
+      - "addon/crates/addon/src/application/addon.rs"
+      - "addon/crates/addon/src/infrastructure/repository.rs"
+      - "addon/crates/addon/src/infrastructure/flight.rs"
+      - "addon/bench/load.js"
+      - "addon/bench/fixtures/representative-benchmark.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  database-contention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bench
+          POSTGRES_PASSWORD: bench
+          POSTGRES_DB: torrentio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bench -d torrentio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Create representative 250k-row dataset
+        env:
+          PGPASSWORD: bench
+        run: |
+          psql -v ON_ERROR_STOP=1 "postgres://bench:bench@127.0.0.1:5432/torrentio" \
+            -f addon/bench/fixtures/representative-benchmark.sql
+          for n in $(seq 9000000 9000099); do
+            printf 'movie tt%s\n' "$n"
+          done > addon/bench/database-contention-targets.txt
+          test "$(wc -l < addon/bench/database-contention-targets.txt)" -eq 100
+
+      - name: Build candidate runtime
+        run: docker build -t torrentio-addon-contention ./addon
+
+      - name: Run cold-cache baseline at 30 virtual users
+        run: |
+          set -eu
+          docker run -d --name torrentio-addon-contention --network host \
+            -e DATABASE_URI=postgres://bench:bench@127.0.0.1:5432/torrentio \
+            -e HOST=127.0.0.1 -e PORT=7000 torrentio-addon-contention
+          cleanup() {
+            docker logs torrentio-addon-contention || true
+            docker rm -f torrentio-addon-contention || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:7000/manifest.json -o /tmp/manifest.json; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE/addon/bench:/work" --workdir /work \
+            -e BASE=http://127.0.0.1:7000 -e MODE=cold -e VUS=30 \
+            -e TARGETS=/work/database-contention-targets.txt \
+            grafana/k6:0.54.0 run \
+            --summary-export=/work/database-contention-30vus.json load.js
+          cleanup
+          trap - EXIT
+
+      - name: Run cold-cache contention test at 64 virtual users
+        run: |
+          set -eu
+          docker run -d --name torrentio-addon-contention --network host \
+            -e DATABASE_URI=postgres://bench:bench@127.0.0.1:5432/torrentio \
+            -e HOST=127.0.0.1 -e PORT=7000 torrentio-addon-contention
+          cleanup() {
+            docker logs torrentio-addon-contention || true
+            docker rm -f torrentio-addon-contention || true
+          }
+          trap cleanup EXIT
+          ready=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:7000/manifest.json -o /tmp/manifest.json; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE/addon/bench:/work" --workdir /work \
+            -e BASE=http://127.0.0.1:7000 -e MODE=cold -e VUS=64 \
+            -e TARGETS=/work/database-contention-targets.txt \
+            grafana/k6:0.54.0 run \
+            --summary-export=/work/database-contention-64vus.json load.js
+          cleanup
+          trap - EXIT
+
+      - name: Upload database contention reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: torrent-engine-database-contention-${{ github.run_id }}
+          path: |
+            addon/bench/database-contention-30vus.json
+            addon/bench/database-contention-64vus.json
+            addon/bench/database-contention-targets.txt
+          if-no-files-found: ignore
+          retention-days: 30
