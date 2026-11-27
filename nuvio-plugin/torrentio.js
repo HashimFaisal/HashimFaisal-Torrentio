@@ -64,9 +64,12 @@ function refreshCacheEntry(key, ttlMs, staleMs, loader, previous) {
   };
   return pending;
 }
-var TMDB_CACHE_MS = 6 * 60 * 60 * 1000;\nvar TMDB_STALE_MS = 24 * 60 * 60 * 1000;
-var INDEX_CACHE_MS = 90 * 1000;\nvar INDEX_STALE_MS = 2 * 60 * 1000;
-var PROVIDER_CACHE_MS = 2 * 60 * 1000;\nvar PROVIDER_STALE_MS = 2 * 60 * 1000;
+var TMDB_CACHE_MS = 6 * 60 * 60 * 1000;
+var TMDB_STALE_MS = 24 * 60 * 60 * 1000;
+var INDEX_CACHE_MS = 90 * 1000;
+var INDEX_STALE_MS = 2 * 60 * 1000;
+var PROVIDER_CACHE_MS = 2 * 60 * 1000;
+var PROVIDER_STALE_MS = 2 * 60 * 1000;
 var PROVIDER_FAILURE_THRESHOLD = 3;
 var PROVIDER_COOLDOWN_MS = 60 * 1000;
 var PROVIDER_SLOW_THRESHOLD_MS = 9000;
