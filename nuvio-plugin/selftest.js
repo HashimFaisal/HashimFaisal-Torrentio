@@ -121,13 +121,13 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(recoveredSearches[0],recoveredSearches[1]);
   assert.equal(recoveredSearches[1],recoveredSearches[2]);
 
-  // Permanent authentication failures must not be retried.
-  calls.length=0; forcedIndexStatus=401;
+  // Permanent malformed-request failures must not be retried; auth cooldown is tested at the end.
+  calls.length=0; forcedIndexStatus=400;
   const unauthorized = await getStreams("626262","movie",null,null);
   assert.ok(unauthorized.some(x=>x.infoHash==="7".repeat(40)),
     "YTS results must survive a permanent The RarBg authentication failure");
   assert.equal(calls.filter(x=>x.includes("/search/?")).length,1,
-    "HTTP 401 must fail fast while the independent YTS provider remains available");
+    "HTTP 400 must fail fast while the independent YTS provider remains available");
   forcedIndexStatus=0;
 
   // Metadata confidence and invalid metadata rejection.
