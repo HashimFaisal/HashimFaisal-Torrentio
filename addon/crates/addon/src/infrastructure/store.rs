@@ -74,6 +74,10 @@ impl Packed {
     }
 }
 
+fn ordered_values<T: Clone>(keys: &[String], values: &HashMap<String, T>) -> Vec<Option<T>> {
+    keys.iter().map(|key| values.get(key).cloned()).collect()
+}
+
 pub async fn connect(uri: &str) -> Result<Client> {
     let mut options = ClientOptions::parse(uri).await?;
     options.compressors = Some(vec![Compressor::Zstd { level: None }]);
@@ -123,7 +127,7 @@ impl Store {
         }
     }
 
-    pub async fn get_many<T: DeserializeOwned + Send + 'static>(&self, keys: &[String]) -> Result<Vec<Option<T>>> {
+    pub async fn get_many<T: DeserializeOwned + Clone + Send + 'static>(&self, keys: &[String]) -> Result<Vec<Option<T>>> {
         let stored: Vec<Stored> = self
             .collection
             .clone_with_type::<Stored>()
@@ -132,7 +136,7 @@ impl Store {
             .await?
             .try_collect()
             .await?;
-        let mut values: HashMap<String, T> = tokio::task::spawn_blocking(move || {
+        let values: HashMap<String, T> = tokio::task::spawn_blocking(move || {
             let mut values = HashMap::with_capacity(stored.len());
             for entry in stored {
                 if let Some(key) = entry.key {
@@ -142,7 +146,7 @@ impl Store {
             Ok::<_, StoreError>(values)
         })
         .await??;
-        Ok(keys.iter().map(|key| values.remove(key)).collect())
+        Ok(ordered_values(keys, &values))
     }
 
     pub async fn get_packed(&self, key: &str) -> Result<Option<Packed>> {
@@ -218,5 +222,31 @@ fn decode_value<T: DeserializeOwned>(value: Bson) -> Result<T> {
     match value {
         Bson::Binary(binary) => Ok(serde_json::from_slice(&zstd::decode_all(binary.bytes.as_slice())?)?),
         other => Ok(bson::from_bson(other)?),
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::ordered_values;
+    use std::collections::HashMap;
+
+    #[test]
+    fn get_many_preserves_duplicate_key_positions() {
+        let keys = vec!["same".to_owned(), "other".to_owned(), "same".to_owned()];
+        let values = HashMap::from([
+            ("same".to_owned(), 7),
+            ("other".to_owned(), 9),
+        ]);
+
+        assert_eq!(ordered_values(&keys, &values), vec![Some(7), Some(9), Some(7)]);
+    }
+
+    #[test]
+    fn get_many_keeps_missing_keys_as_none() {
+        let keys = vec!["present".to_owned(), "missing".to_owned()];
+        let values = HashMap::from([("present".to_owned(), 7)]);
+
+        assert_eq!(ordered_values(&keys, &values), vec![Some(7), None]);
     }
 }
