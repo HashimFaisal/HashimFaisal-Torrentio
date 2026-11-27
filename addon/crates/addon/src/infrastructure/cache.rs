@@ -58,7 +58,7 @@ fn json_heap_bytes(value: &Value) -> usize {
         }
         Value::Object(values) => values
             .iter()
-            .map(|(key, value)| size_of::<(String, Value)>() + key.capacity() + json_heap_bytes(value))
+            .map(|(key, value)| size_of::<(String, Value)>() + 64 + key.capacity() + json_heap_bytes(value))
             .sum(),
         _ => 0,
     }
@@ -447,6 +447,9 @@ mod tests {
     async fn memory_cache_gauges_report_entries_and_compressed_bytes() {
         let cache = cache();
         let streams: Vec<Stream> = (0..50).map(stream).collect();
+        let packed = Packed::encode(&streams).unwrap();
+        let decoded_bytes = decoded_stream_bytes(&streams, streams.capacity());
+        let expected_bytes = stream_key("tt2").len() + packed.len() + decoded_bytes;
         cache.wrap_stream("tt2", || async { Ok::<_, String>(streams) }).await.unwrap();
         cache.streams.run_pending_tasks().await;
         cache.observe();
@@ -461,7 +464,7 @@ mod tests {
         };
         assert!((gauge("memory_cache_entries") - 1.0).abs() < f64::EPSILON, "{rendered}");
         let bytes = gauge("memory_cache_bytes");
-        assert!(bytes > 0.0 && bytes < 20_000.0, "{bytes}");
+        assert_eq!(bytes, expected_bytes as f64, "{rendered}");
     }
 
     #[test]
