@@ -215,9 +215,7 @@ function mergeSameHash(existing, incoming) {
   merged.networkScore = Math.max(existing.networkScore, incoming.networkScore);
   merged.swarmHealth = swarm.swarmHealth;
   merged.metadataConfidence = Math.max(existing.metadataConfidence, incoming.metadataConfidence);
-  merged.metadataWarnings = Array.from(new Set(
-    (existing.metadataWarnings || []).concat(incoming.metadataWarnings || [])
-  ));
+  merged.metadataWarnings = (preferred.metadataWarnings || []).slice();
   merged.source = preferred.source || existing.source || incoming.source || "";
   merged.codec = preferred.codec || existing.codec || incoming.codec || "";
   merged.hdr = preferred.hdr || existing.hdr || incoming.hdr || "";
