@@ -273,4 +273,13 @@ mod tests {
         let streams = vec![stream("T\n720p", "a\n👤 5"), stream("T\n720p", "b\n👤 0")];
         assert_eq!(sort_streams(streams, &config).len(), 2);
     }
+
+    #[test]
+    fn direct_http_streams_bypass_minimum_seeder_filtering() {
+        let config = Config::parse("minseeders=100");
+        let direct = stream("[HTTP] Example CDN\\n1080p", "Movie.2024.1080p.WEB-DL");
+        let result = sort_streams(vec![direct], &config);
+        assert_eq!(result.len(), 1);
+        assert!(result[0].name.starts_with("[HTTP]"));
+    }
 }
