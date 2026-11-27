@@ -1,0 +1,40 @@
+name: Direct Streaming Checks
+
+on:
+  push:
+    branches:
+      - direct-streaming
+    paths:
+      - "addon/**"
+      - "docs/DIRECT_STREAMING_ENGINE.md"
+      - ".github/workflows/direct-streaming-checks.yml"
+  pull_request:
+    branches:
+      - direct-streaming
+    paths:
+      - "addon/**"
+      - "docs/DIRECT_STREAMING_ENGINE.md"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./addon
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: addon
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked
