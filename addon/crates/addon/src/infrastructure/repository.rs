@@ -35,7 +35,7 @@ macro_rules! entries_sql {
     FROM "files" AS f INNER JOIN "torrents" AS t ON f."infoHash" = t."infoHash"
     WHERE "#,
             $condition,
-            r#" ORDER BY t."seeders" DESC LIMIT 500"#
+            r#" ORDER BY COALESCE(t."seeders", 0) DESC, t."uploadDate" DESC LIMIT 500"#
         )
     };
 }
@@ -250,6 +250,7 @@ mod tests {
     fn entry_queries_only_rank_files_with_matching_torrents() {
         for query in [IMDB_MOVIE_SQL, IMDB_SERIES_SQL, KITSU_MOVIE_SQL, KITSU_SERIES_SQL] {
             assert!(query.contains(r#"INNER JOIN "torrents" AS t"#));
+            assert!(query.contains(r#"ORDER BY COALESCE(t."seeders", 0) DESC, t."uploadDate" DESC LIMIT 500"#));
             assert!(!query.contains("LEFT OUTER JOIN"));
         }
     }
