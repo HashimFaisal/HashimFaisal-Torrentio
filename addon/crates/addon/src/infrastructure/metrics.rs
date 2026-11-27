@@ -409,7 +409,7 @@ mod tests {
         let metrics = Metrics::new();
         metrics.observe_pool_acquire(Duration::from_millis(25));
         let rendered = metrics.render();
-        assert!(rendered.contains("db_pool_acquire_duration_seconds_count 1"));
-        assert!(rendered.contains("db_pool_acquire_duration_seconds_sum 0.025"));
+        assert!(rendered.contains("db_pool_acquire_duration_seconds_count{app=\"torrentio-addon\"} 1"));
+        assert!(rendered.contains("db_pool_acquire_duration_seconds_sum{app=\"torrentio-addon\"} 0.025"));
     }
 }
