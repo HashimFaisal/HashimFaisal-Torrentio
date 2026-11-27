@@ -72,13 +72,16 @@ global.fetch = async (url) => {
 const {getStreams}=require("./torrentio.js");
 (async()=>{
   let r=await getStreams("27205","movie",null,null);
-  assert.equal(r.length,4); assert.equal(r[0].infoHash,"e".repeat(40)); assert.equal(typeof r[0].size,"number"); assert.equal(r[0].swarmHealth,"healthy"); assert.equal(r[1].infoHash,"a".repeat(40)); assert.equal(r[2].infoHash,"f".repeat(40)); assert.equal(r[2].swarmHealth,"thin"); assert.ok(!r.some(x=>x.infoHash==="g".repeat(40)), "rejects magnet/infoHash mismatch");
+  assert.equal(r.length,4); assert.equal(r[0].networkProfile,"medium");
+  assert.equal(r[0].networkFit,"recommended-size");
+  assert.equal(r[0].infoHash,"e".repeat(40)); assert.equal(typeof r[0].size,"number"); assert.equal(r[0].swarmHealth,"healthy"); assert.equal(r[1].infoHash,"a".repeat(40)); assert.equal(r[2].infoHash,"f".repeat(40)); assert.equal(r[2].swarmHealth,"thin"); assert.ok(!r.some(x=>x.infoHash==="g".repeat(40)), "rejects magnet/infoHash mismatch");
   assert.ok(calls.some(x=>x.includes("imdb=tt1375666")), "IMDb id must be sent to The RarBg");
   assert.ok(calls.some(x=>x.includes("movies-api.accel.li") && x.includes("query_term=tt1375666")), "YTS must receive the exact IMDb id");
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
   mode="tv"; calls.length=0;
   r=await getStreams("1396","tv",1,1);
-  assert.equal(r.length,2); assert.ok(r.some(x=>x.infoHash==="b".repeat(40)));
+  assert.equal(r.length,2); assert.equal(r[0].networkProfile,"fast");
+  assert.ok(r.some(x=>x.infoHash==="b".repeat(40)));
   assert.ok(r.some(x=>x.infoHash==="8".repeat(40)), "EZTV exact episode result must be included");
   assert.ok(!r.some(x=>x.infoHash==="9".repeat(40)), "EZTV other episodes must be excluded");
   assert.match(calls[1],/season=1&episode=1/);
@@ -161,5 +164,5 @@ const {getStreams}=require("./torrentio.js");
   forcedYtsStatus=0;
 
 
-  console.log("PASS: multi-provider fan-out, provider isolation, cross-source deduplication, swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, retry recovery, and metadata validation.");
+  console.log("PASS: multi-provider fan-out, provider isolation and circuit breaking, latency-driven network profiles, cross-source deduplication, swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, retry recovery, and metadata validation.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
