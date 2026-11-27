@@ -46,7 +46,7 @@ node --check torrentio.js
 node selftest.js
 ```
 
-The self-test fixtures cover parallel provider fan-out, provider failure isolation, YTS movie mapping, EZTV exact-episode mapping, cross-provider BTIH consolidation, adaptive The RarBg search, hexadecimal/Base32 BTIH normalization and magnet integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error handling, metadata confidence, resolution conflict handling, and invalid metadata rejection. Fixtures are maintained for provider fan-out, failure isolation, cooldown behavior, adaptive network scoring, and structured validation. They have intentionally not been executed yet for this development pass.
+The self-test fixtures cover parallel provider fan-out, provider failure isolation, YTS movie mapping, EZTV exact-episode mapping, cross-provider BTIH consolidation, adaptive The RarBg search, hexadecimal/Base32 BTIH normalization and magnet integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error handling, metadata confidence, resolution conflict handling, and invalid metadata rejection. Fixtures are maintained for provider fan-out, failure isolation, cooldown behavior, adaptive network scoring, and structured validation. GitHub Actions self-tests now pass on `direct-streaming`, including multi-provider fan-out, provider isolation and circuit breaking, latency-driven network-profile selection, cross-provider deduplication, retry recovery, caching, and metadata validation. This is mocked integration coverage; it does not verify live upstream availability or measure real P2P throughput.
 
 ## Source and limitations
 
