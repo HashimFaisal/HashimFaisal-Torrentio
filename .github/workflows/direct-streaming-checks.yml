@@ -6,7 +6,6 @@ on:
       - direct-streaming
     paths:
       - "addon/**"
-      - "docs/DIRECT_STREAMING_ENGINE.md"
       - ".github/workflows/direct-streaming-checks.yml"
   pull_request:
     branches:
