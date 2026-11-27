@@ -10,6 +10,7 @@ global.fetch = async (url) => {
   const hash = (c) => c.repeat(40);
   const rows = mode==="movie" ? [
     {name:"Inception 2160p",infoHash:hash("a"),magnet:"magnet:?xt=urn:btih:"+hash("a"),seeders:80,resolution:"2160p",size:1000000000},
+    {name:"Inception 720p",infoHash:hash("e"),magnet:"magnet:?xt=urn:btih:"+hash("e"),seeders:20,resolution:"720p",size:3000000000},
     {name:"bad",infoHash:"bad",magnet:"magnet:?xt=urn:btih:bad",seeders:10}
   ] : [
     {name:"Breaking.Bad.S01E01.Pilot.1080p",infoHash:hash("b"),magnet:"magnet:?xt=urn:btih:"+hash("b"),seeders:50,resolution:"1080p",season:1,episode:1},
@@ -21,7 +22,7 @@ global.fetch = async (url) => {
 const {getStreams}=require("./torrentio.js");
 (async()=>{
   let r=await getStreams("27205","movie",null,null);
-  assert.equal(r.length,1); assert.equal(r[0].quality,"2160p"); assert.equal(typeof r[0].size,"number"); assert.equal(r[0].size,1000000000);
+  assert.equal(r.length,2); assert.equal(r[0].quality,"720p"); assert.equal(r[0].infoHash,"e".repeat(40)); assert.equal(typeof r[0].size,"number"); assert.equal(r[1].quality,"2160p");
   assert.match(calls[1],/imdb=tt1375666/);
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
   mode="tv"; calls.length=0;
