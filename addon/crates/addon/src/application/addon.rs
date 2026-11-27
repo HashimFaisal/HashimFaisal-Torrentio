@@ -21,6 +21,7 @@ use crate::{
 };
 
 const CACHE_MAX_AGE_EMPTY: u32 = 60;
+const DIRECT_CACHE_MAX_AGE: u32 = 60;
 const CATALOG_CACHE_MAX_AGE: u32 = 0;
 const STALE_REVALIDATE_AGE: u32 = 4 * 60 * 60;
 const STALE_ERROR_AGE: u32 = 7 * 24 * 60 * 60;
@@ -120,6 +121,8 @@ impl Addon {
         };
         let streams = filter::apply(&cached, config, content_type);
         let mut streams = sort_streams(streams, config);
+        // Prefer server-hosted HTTP sources without using peer counts as a signal.
+        streams.sort_by_key(|stream| !stream.name.starts_with("[HTTP]"));
         enrich_stream_sources(&mut streams);
         let streams = self.mochs.apply(streams, config).await;
         Ok(self.with_cache_params(streams))
@@ -177,8 +180,7 @@ impl Addon {
     async fn records(&self, content_type: ContentType, id: &str) -> Result<Vec<Record>, HandlerError> {
         let result = if content_type == ContentType::Movie {
             self.movie_records(id).await
-        } else {
-            self.series_records(id).await
+        } else {            self.series_records(id).await
         };
         result.map_err(HandlerError::failed)
     }
@@ -216,6 +218,8 @@ impl Addon {
             CACHE_MAX_AGE_EMPTY
         } else if streams.iter().all(|stream| stream.url.as_deref().is_some_and(is_static_url)) {
             0
+        } else if streams.iter().any(|stream| stream.name.starts_with("[HTTP]")) {
+            DIRECT_CACHE_MAX_AGE
         } else {
             self.cache_max_age
         };
@@ -357,8 +361,7 @@ mod tests {
                 "" => MochError::message("must not be called"),
                 "bad-token" => CommonError::BadToken.into(),
                 "denied" => CommonError::AccessDenied.into(),
-                "boom" => MochError::message("boom"),
-                _ => CommonError::NotFound.into(),
+                "boom" => MochError::message("boom"),                _ => CommonError::NotFound.into(),
             })
         }
 
@@ -537,8 +540,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn empty_results_count_against_the_empty_budget() {
-        let harness = harness_with(FakeRepository::default(), enforcing(100, 1));
+    async fn empty_results_count_against_the_empty_budget() {        let harness = harness_with(FakeRepository::default(), enforcing(100, 1));
         let config = config_from("1.1.1.1", "");
         harness.movies(&["tt1", "tt2"], &config).await;
         assert!(harness.rate_limited("tt3", &config).await);
