@@ -218,12 +218,12 @@ mod tests {
     fn quality_grouping_preserves_order_within_each_bucket() {
         let config = Config::parse("");
         let streams = vec![
-            stream("T\\n1080p", "first\\n👤 20"),
-            stream("T\\n720p", "lower\\n👤 30"),
-            stream("T\\n1080p", "second\\n👤 10"),
+            stream("T\n1080p", "first\n👤 20"),
+            stream("T\n720p", "lower\n👤 30"),
+            stream("T\n1080p", "second\n👤 10"),
         ];
         let titles: Vec<String> = sort_streams(streams, &config).into_iter().map(|stream| stream.title).collect();
-        assert_eq!(titles, vec!["first\\n👤 20", "second\\n👤 10", "lower\\n👤 30"]);
+        assert_eq!(titles, vec!["first\n👤 20", "second\n👤 10", "lower\n👤 30"]);
     }
 
     #[test]
