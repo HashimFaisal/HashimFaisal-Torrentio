@@ -219,5 +219,4 @@ mod tests {
         assert_eq!(result.name, "[HTTP] Example CDN\n1080p");
         assert_eq!(result.url.as_deref(), Some("https://cdn.example/movie.m3u8"));
     }
-
 }
