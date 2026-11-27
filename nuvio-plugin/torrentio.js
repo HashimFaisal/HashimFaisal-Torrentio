@@ -43,12 +43,13 @@ function providerState(name) {
   return providerHealth[name] || (providerHealth[name] = {
     requests: 0, successes: 0, failures: 0, results: 0, lastLatencyMs: 0,
     averageLatencyMs: 0, consecutiveFailures: 0, circuitOpenUntil: 0,
-    lastError: "", lastErrorKind: "", lastSuccessAt: 0, lastFailureAt: 0
+    lastError: "", lastErrorKind: "", lastSuccessAt: 0, lastFailureAt: 0,
+    windowStartedAt: Date.now(), windowRequests: 0, windowFailures: 0
   });
 }
 function classifyProviderError(error) {
   var message = str(error && error.message ? error.message : error).toLowerCase();
-  var status = Number((message.match(/http\\s+(\\d{3})/) || [])[1] || 0);
+  var status = Number((message.match(/http\s+(\d{3})/) || [])[1] || 0);
   if (status >= 400 && status < 500) return "provider-http-client-error";
   if (status >= 500) return "provider-http-server-error";
   if (/invalid .*response|malformed|unexpected.*json/.test(message)) return "malformed-index-response";
@@ -59,7 +60,10 @@ function classifyProviderError(error) {
 function recordProvider(name, startedAt, ok, detail) {
   var state = providerState(name);
   var latency = Math.max(0, Date.now() - startedAt);
-  state.requests++;
+  if (Date.now() - state.windowStartedAt > 10 * 60 * 1000) {
+    state.windowStartedAt = Date.now(); state.windowRequests = 0; state.windowFailures = 0;
+  }
+  state.requests++; state.windowRequests++;
   state.lastLatencyMs = latency;
   state.averageLatencyMs = state.averageLatencyMs ? Math.round(state.averageLatencyMs * 0.7 + latency * 0.3) : latency;
   if (ok) {
@@ -67,7 +71,7 @@ function recordProvider(name, startedAt, ok, detail) {
     state.lastErrorKind = ""; state.consecutiveFailures = 0;
     state.circuitOpenUntil = 0; state.lastSuccessAt = Date.now();
   } else {
-    state.failures++; state.consecutiveFailures++;
+    state.failures++; state.windowFailures++; state.consecutiveFailures++;
     state.lastError = str(detail && detail.message ? detail.message : detail || "provider failed").slice(0, 180);
     state.lastErrorKind = classifyProviderError(detail);
     state.lastFailureAt = Date.now();
@@ -126,7 +130,7 @@ function getNetworkProfile() {
     var state = providerHealth[name];
     if (state.requests) {
       latencies.push(state.averageLatencyMs || state.lastLatencyMs);
-      requests += state.requests; failures += state.failures;
+      requests += state.windowRequests || 0; failures += state.windowFailures || 0;
     }
   });
   if (!latencies.length) return "medium";
