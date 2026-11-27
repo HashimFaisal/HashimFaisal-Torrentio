@@ -176,7 +176,7 @@ pub fn apply(streams: &[Stream], config: &Config, content_type: ContentType) -> 
     streams
         .iter()
         .filter(|stream| {
-            (stream.name.starts_with("[HTTP]") || provider_allowed(&stream.title, providers))
+            provider_allowed(&stream.title, providers)
                 && !is_excluded(stream, &preferences.qualities)
                 && size_limit.is_none_or(|limit| extract_size(&stream.title) <= limit)
         })
@@ -232,15 +232,4 @@ mod tests {
         assert!(!Quality::Unknown.matches(Some("720p"), None));
     }
 
-    #[test]
-    fn direct_http_streams_are_not_rejected_by_torrent_provider_filters() {
-        let stream = Stream {
-            name: "[HTTP] Example CDN\n1080p".to_owned(),
-            title: "Movie.2024.1080p.WEB-DL".to_owned(),
-            url: Some("https://cdn.example/movie.mp4".to_owned()),
-            ..Stream::default()
-        };
-        let result = apply(&[stream], &Config::default(), ContentType::Movie);
-        assert_eq!(result.len(), 1);
-    }
 }
