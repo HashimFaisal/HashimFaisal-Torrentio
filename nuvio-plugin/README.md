@@ -1,6 +1,6 @@
 # Torrentio Local for Nuvio
 
-A client-side Nuvio JavaScript plugin. It resolves Nuvio's TMDB ID to an IMDb ID using the TMDB key exposed by Nuvio's plugin runtime, then queries The RarBg's public JSON API.
+A client-side Nuvio JavaScript plugin. It resolves Nuvio's TMDB ID to an IMDb ID using the TMDB key exposed by Nuvio's plugin runtime, then searches independent torrent catalogs in parallel. The current provider set is The RarBg for movies and TV, YTS for movies, and EZTV for TV.
 
 ## Install
 
@@ -10,9 +10,14 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 
 ## Features
 
+- Multi-source search: The RarBg, YTS (movies), and EZTV (TV) are queried concurrently. A failure or malformed response from one provider is isolated and does not discard results returned by the others.
+- Provider-aware result merging: exact matching BTIH hashes are consolidated across providers, preserving alternate titles and all contributing provider labels without merging different payloads.
+- Per-provider runtime health counters track request count, successes, failures, result counts, and last observed latency in diagnostic logs.
+- Short-lived provider response caching (2 minutes) limits repeat lookups while allowing swarm metadata to refresh.
+
 - Movies and exact TV episodes.
 - TMDB ID → IMDb ID resolution.
-- Exact IMDb/season/episode search through The RarBg API.
+- Exact IMDb/season/episode search through The RarBg API, with YTS IMDb lookup for movies and EZTV IMDb lookup for TV.
 - Supports both 40-character hexadecimal and 32-character Base32 BTIH hashes. Both forms are normalized to one canonical hexadecimal hash before comparison, deduplication, and returning the stream.
 - Verifies that the normalized info hash matches the BTIH hash embedded in each magnet URI; malformed or mismatched pairs are discarded.
 - Consolidates repeated API rows by exact `infoHash`, including duplicates encountered across adaptive search thresholds. The merged result keeps the strongest metadata confidence and swarm counters, fills missing source/codec details, and records alternate release titles.
@@ -41,6 +46,6 @@ The self-test covers adaptive search, movie lookup, exact episode filtering, sea
 
 ## Source and limitations
 
-The sole metadata source in this version is [The RarBg public JSON API](https://therarbg.com/developers/). Coverage and seed counts depend on that service and the live swarm. TV packs are intentionally filtered; this improves episode precision but can reduce result counts.
+Provider coverage is split by catalog: [The RarBg public JSON API](https://therarbg.com/developers/) covers movies and TV; [YTS API](https://yts.proxyninja.org/api) supplements movie releases; [EZTV API](https://eztvx.to/api/) supplements TV episodes. YTS is movie-only and its catalog is selective, while EZTV's API is documented as beta. Provider uptime, catalog coverage, and swarm counts can change independently. TV packs and multi-episode ranges are intentionally filtered; this improves episode precision but can reduce result counts.
 
 TMDB and The RarBg are third-party services and may change availability or response formats. Use torrents only where you have the rights and permission to access the content.
