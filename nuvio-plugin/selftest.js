@@ -21,7 +21,12 @@ global.fetch = async (url) => {
     return {ok:true,status:200,json:async()=>({imdb_id:imdbId})};
   }
   const hash = (c) => c.repeat(40);
-  const rows = mode==="movie" ? [
+  const rows = mode==="metadata" ? [
+    {name:"Example.Release.1080p.BluRay",infoHash:hash("m"),magnet:"magnet:?xt=urn:btih:"+hash("m"),seeders:25,leechers:2,resolution:"1080p",size:2200000000,source:"BluRay",codec:"x265"},
+    {name:"Example.Release.720p.WEB",infoHash:hash("n"),magnet:"magnet:?xt=urn:btih:"+hash("n"),seeders:500,leechers:1,resolution:"2160p",size:900000000,source:"WEB",codec:"x264"},
+    {name:"fractional swarm",infoHash:hash("o"),magnet:"magnet:?xt=urn:btih:"+hash("o"),seeders:3.5,leechers:1,resolution:"1080p",size:900000000},
+    {name:"failed verification",infoHash:hash("p"),magnet:"magnet:?xt=urn:btih:"+hash("p"),seeders:20,leechers:1,resolution:"1080p",size:900000000,verifile:false}
+  ] : mode==="movie" ? [
     {name:"Inception 2160p",infoHash:hash("a"),magnet:"magnet:?xt=urn:btih:"+hash("a"),seeders:80,leechers:80,resolution:"2160p",size:1000000000},
     {name:"Inception 720p",infoHash:hash("e"),magnet:"magnet:?xt=urn:btih:"+hash("e"),seeders:20,leechers:2,resolution:"720p",size:3000000000},
     {name:"Inception 720p crowded",infoHash:hash("f"),magnet:"magnet:?xt=urn:btih:"+hash("f"),seeders:20,leechers:80,resolution:"720p",size:3000000000},
@@ -79,6 +84,21 @@ const {getStreams}=require("./torrentio.js");
   assert.equal(calls.filter(x=>x.includes("/search/?")).length,1,
     "HTTP 401 must fail fast without retrying");
   forcedIndexStatus=0;
+
+  // Metadata confidence and invalid metadata rejection.
+  mode="metadata"; calls.length=0;
+  const metadataResults=await getStreams("737373","movie",null,null);
+  assert.equal(metadataResults.length,2);
+  const mismatch=metadataResults.find(x=>x.infoHash==="n".repeat(40));
+  assert.ok(mismatch);
+  assert.equal(mismatch.quality,"720p",
+    "conflicting structured/title resolution must use the conservative lower value");
+  assert.ok(mismatch.metadataWarnings.includes("resolution-conflict"));
+  assert.ok(mismatch.metadataConfidence<100);
+  assert.ok(!metadataResults.some(x=>x.infoHash==="o".repeat(40)),
+    "fractional swarm counts must be rejected");
+  assert.ok(!metadataResults.some(x=>x.infoHash==="p".repeat(40)),
+    "explicitly failed verification must be rejected");
 
   console.log("PASS: swarm ranking, magnet integrity, episode filtering, cache/coalescing, transient retry recovery, and permanent-error fast-fail.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
