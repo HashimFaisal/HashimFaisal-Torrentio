@@ -13,7 +13,26 @@ global.fetch = async (url) => {
     transientFailures--;
     return {ok:false,status:503,headers:{get:()=>null},json:async()=>({})};
   }
-  if (String(url).includes("/external_ids?")) {
+  if (String(url).includes("movies-api.accel.li")) {
+    const imdb = new URL(String(url)).searchParams.get("query_term");
+    const h = "7".repeat(40);
+    return {ok:true,status:200,json:async()=>({status:"ok",data:{movies:[{
+      imdb_code:imdb,title:"Provider Movie",title_long:"Provider Movie (2026)",
+      torrents:[{hash:h,quality:"480p",type:"web",seeds:1,peers:40,size_bytes:700000000,
+        magnet_url:"magnet:?xt=urn:btih:"+h}]
+    }]}})};
+  }
+  if (String(url).includes("eztvx.to/api/get-torrents")) {
+    const h = "8".repeat(40);
+    return {ok:true,status:200,json:async()=>({torrents:[
+      {hash:h,filename:"Breaking.Bad.S01E01.Pilot.720p",magnet_url:"magnet:?xt=urn:btih:"+h,
+       seeds:12,peers:2,size_bytes:"1500000000",season:"1",episode:"1"},
+      {hash:"9".repeat(40),filename:"Breaking.Bad.S01E02.720p",
+       magnet_url:"magnet:?xt=urn:btih:"+"9".repeat(40),seeds:30,peers:2,
+       size_bytes:"1500000000",season:"1",episode:"2"}
+    ]})};
+  }
+  if (String(url).includes("/external_ids?"))
     const imdbId = String(url).includes("/525252/") ? "tt525252" :
       String(url).includes("/626262/") ? "tt626262" :
       String(url).includes("/424242/") ? "tt424242" :
@@ -45,12 +64,15 @@ global.fetch = async (url) => {
 const {getStreams}=require("./torrentio.js");
 (async()=>{
   let r=await getStreams("27205","movie",null,null);
-  assert.equal(r.length,3); assert.equal(r[0].infoHash,"e".repeat(40)); assert.equal(typeof r[0].size,"number"); assert.equal(r[0].swarmHealth,"healthy"); assert.equal(r[1].infoHash,"a".repeat(40)); assert.equal(r[2].infoHash,"f".repeat(40)); assert.equal(r[2].swarmHealth,"thin"); assert.ok(!r.some(x=>x.infoHash==="g".repeat(40)), "rejects magnet/infoHash mismatch");
-  assert.match(calls[1],/imdb=tt1375666/);
+  assert.equal(r.length,4); assert.equal(r[0].infoHash,"e".repeat(40)); assert.equal(typeof r[0].size,"number"); assert.equal(r[0].swarmHealth,"healthy"); assert.equal(r[1].infoHash,"a".repeat(40)); assert.equal(r[2].infoHash,"f".repeat(40)); assert.equal(r[2].swarmHealth,"thin"); assert.ok(!r.some(x=>x.infoHash==="g".repeat(40)), "rejects magnet/infoHash mismatch");
+  assert.ok(calls.some(x=>x.includes("imdb=tt1375666")), "IMDb id must be sent to The RarBg");
+  assert.ok(calls.some(x=>x.includes("movies-api.accel.li") && x.includes("query_term=tt1375666")), "YTS must receive the exact IMDb id");
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
   mode="tv"; calls.length=0;
   r=await getStreams("1396","tv",1,1);
-  assert.equal(r.length,1); assert.equal(r[0].infoHash,"b".repeat(40));
+  assert.equal(r.length,2); assert.ok(r.some(x=>x.infoHash==="b".repeat(40)));
+  assert.ok(r.some(x=>x.infoHash==="8".repeat(40)), "EZTV exact episode result must be included");
+  assert.ok(!r.some(x=>x.infoHash==="9".repeat(40)), "EZTV other episodes must be excluded");
   assert.match(calls[1],/season=1&episode=1/);
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
 
@@ -67,8 +89,8 @@ const {getStreams}=require("./torrentio.js");
     getStreams("424242","movie",null,null),
     getStreams("424242","movie",null,null)
   ]);
-  assert.equal(calls.length-beforeConcurrent,4,
-    "two simultaneous lookups should share one TMDB request and three index requests");
+  assert.equal(calls.length-beforeConcurrent,5,
+    "two simultaneous lookups should share one TMDB request, three index requests, and one YTS request");
 
   // Two transient 503 responses should recover on the third attempt.
   mode="movie"; calls.length=0; transientFailures=2;
@@ -83,15 +105,16 @@ const {getStreams}=require("./torrentio.js");
   // Permanent authentication failures must not be retried.
   calls.length=0; forcedIndexStatus=401;
   const unauthorized = await getStreams("626262","movie",null,null);
-  assert.equal(unauthorized.length,0);
+  assert.ok(unauthorized.some(x=>x.infoHash==="7".repeat(40)),
+    "YTS results must survive a permanent The RarBg authentication failure");
   assert.equal(calls.filter(x=>x.includes("/search/?")).length,1,
-    "HTTP 401 must fail fast without retrying");
+    "HTTP 401 must fail fast while the independent YTS provider remains available");
   forcedIndexStatus=0;
 
   // Metadata confidence and invalid metadata rejection.
   mode="metadata"; calls.length=0;
   const metadataResults=await getStreams("737373","movie",null,null);
-  assert.equal(metadataResults.length,4);
+  assert.equal(metadataResults.length,5);
   const merged=metadataResults.find(x=>x.infoHash==="2".repeat(40));
   assert.ok(merged);
   assert.ok(merged.duplicateCount >= 2,
@@ -117,5 +140,5 @@ const {getStreams}=require("./torrentio.js");
   assert.ok(!metadataResults.some(x=>x.infoHash==="6".repeat(40)),
     "explicit failed verification must be rejected");
 
-  console.log("PASS: swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, transient retry recovery, and permanent-error fast-fail.");
+  console.log("PASS: multi-provider fan-out, provider isolation, cross-source deduplication, swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, retry recovery, and metadata validation.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
