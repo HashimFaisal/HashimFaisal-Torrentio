@@ -283,7 +283,7 @@ fn record_rank(record: &Record) -> (u32, i16, i64, i64) {
 fn to_streams(mut records: Vec<Record>) -> Vec<Stream> {
     // Duplicate hash/file entries can arrive from different providers or query paths.
     // Rank them here instead of relying on database row order before keeping one.
-    records.sort_by(|left, right| record_rank(right).cmp(&record_rank(left)));
+    records.sort_by_key(|record| std::cmp::Reverse(record_rank(record)));
 
     let mut seen = HashSet::with_capacity(records.len());
     records
