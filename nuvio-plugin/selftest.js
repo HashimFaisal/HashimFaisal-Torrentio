@@ -89,6 +89,7 @@ global.fetch = async (url) => {
       String(url).includes("/696969/") ? "tt696969" :
       String(url).includes("/747474/") ? "tt747474" :
       String(url).includes("/757575/") ? "tt757575" :
+      String(url).includes("/787878/") ? "tt787878" :
       mode==="movie" ? "tt1375666" : mode==="tv" ? "tt0903747" : "tt1234567";
     return {ok:true,status:200,json:async()=>({imdb_id:imdbId})};
   }
