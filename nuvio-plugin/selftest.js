@@ -194,7 +194,7 @@ const {getStreams}=require("./torrentio.js");
   assert.ok(calls.some(x=>x.includes("min_seeders=1")));
 
   // Permanent malformed-request failures must not be retried; auth cooldown is tested at the end.
-  calls.length=0; forcedIndexStatus=400;
+  mode="movie"; calls.length=0; forcedIndexStatus=400;
   const unauthorized = await getStreams("626262","movie",null,null);
   assert.ok(unauthorized.some(x=>x.infoHash==="7".repeat(40)),
     "YTS results must survive a permanent The RarBg authentication failure");
