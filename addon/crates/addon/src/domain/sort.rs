@@ -133,9 +133,7 @@ fn sort_by_quality(streams: Vec<Stream>, nested_by_size: bool) -> Vec<Stream> {
         groups[index].push(stream);
     }
     let mut order: Vec<(String, usize)> = group_indices.into_iter().collect();
-    order.sort_by(|(a, a_index), (b, b_index)| {
-        compare_qualities(a, b).then_with(|| a_index.cmp(b_index))
-    });
+    order.sort_by(|(a, a_index), (b, b_index)| compare_qualities(a, b).then_with(|| a_index.cmp(b_index)));
     order
         .into_iter()
         .flat_map(|(_, index)| {
