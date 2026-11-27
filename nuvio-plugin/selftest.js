@@ -95,15 +95,6 @@ const {getStreams}=require("./torrentio.js");
   assert.match(calls[1],/season=1&episode=1/);
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
 
-  // Authentication failures should be classified and cooled down immediately.
-  forcedEztvStatus=403; calls.length=0;
-  await getStreams("747474","tv",1,1);
-  assert.equal(calls.filter(x=>x.includes("eztvx.to/api/get-torrents")).length,1);
-  forcedEztvStatus=0; calls.length=0;
-  await getStreams("757575","tv",1,1);
-  assert.equal(calls.filter(x=>x.includes("eztvx.to/api/get-torrents")).length,0,
-    "an endpoint with an authentication failure must be bypassed during its extended cooldown");
-
   // Repeating the same lookup should be served from the short-lived cache.
   const beforeRepeat = calls.length;
   const repeated = await getStreams("1396","tv",1,1);
@@ -191,6 +182,15 @@ const {getStreams}=require("./torrentio.js");
   Date.now = realNow;
   assert.equal(calls.filter(x=>x.includes("movies-api.accel.li")).length,1,
     "only one concurrent lookup may probe a recovering provider");
+
+  // Authentication failures should be classified and cooled down immediately.
+  mode="tv"; forcedEztvStatus=403; calls.length=0;
+  await getStreams("747474","tv",1,1);
+  assert.equal(calls.filter(x=>x.includes("eztvx.to/api/get-torrents")).length,1);
+  forcedEztvStatus=0; calls.length=0;
+  await getStreams("757575","tv",1,1);
+  assert.equal(calls.filter(x=>x.includes("eztvx.to/api/get-torrents")).length,0,
+    "an endpoint with an authentication failure must be bypassed during its extended cooldown");
 
   console.log("PASS: multi-provider fan-out, provider isolation and circuit breaking, latency-driven network profiles, cross-source deduplication, swarm ranking, Base32 BTIH compatibility, magnet integrity, episode filtering, cache/coalescing, retry recovery, and metadata validation.");
 })().catch(e=>{console.error(e);process.exitCode=1;});
