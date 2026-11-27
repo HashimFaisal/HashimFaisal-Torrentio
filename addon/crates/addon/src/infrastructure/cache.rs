@@ -464,7 +464,7 @@ mod tests {
         let streams: Vec<Stream> = (0..50).map(stream).collect();
         let packed = Packed::encode(&streams).unwrap();
         let decoded_bytes = decoded_stream_bytes(&streams, streams.capacity());
-        let expected_bytes = stream_key("tt2").len() + packed.len() + decoded_bytes;
+        let expected_bytes = stream_key("tt2").capacity() + packed.len() + decoded_bytes;
         cache.wrap_stream("tt2", || async { Ok::<_, String>(streams) }).await.unwrap();
         cache.streams.run_pending_tasks().await;
         cache.observe();
