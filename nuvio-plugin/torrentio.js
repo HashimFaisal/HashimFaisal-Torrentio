@@ -103,7 +103,10 @@ function releaseMetadata(item) {
   if (!str(item.source)) warnings.push("missing-source");
   if (!str(item.codec)) warnings.push("missing-codec");
   if (!str(item.hdr) && /hdr|dolby.?vision/i.test(title)) warnings.push("hdr-not-structured");
+  var verification = str(item.verifile).toLowerCase().trim();
+  if (verification && verification !== "verified") warnings.push("verification-unconfirmed");
   var confidence = 100;
+  if (verification && verification !== "verified") confidence -= 12;
   if (conflict) confidence -= 35;
   if (!str(item.source)) confidence -= 10;
   if (!str(item.codec)) confidence -= 10;
@@ -123,7 +126,9 @@ function validCount(value) {
 function rejectedVerification(value) {
   if (value === false || value === 0) return true;
   var state = str(value).toLowerCase().trim();
-  return state === "failed" || state === "false" || state === "invalid" || state === "0";
+  // The upstream API distinguishes failed from cant_check/retried/unknown.
+  // Only an explicit failed verdict means the content was checked and rejected.
+  return state === "failed";
 }
 // Idempotent GET recovery for temporary upstream/network failures.
 // Bounded retries prevent request storms and permanent 4xx responses fail fast.
