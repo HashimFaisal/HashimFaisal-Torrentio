@@ -1,6 +1,11 @@
 name: Torrent Engine Self Benchmark
 
 on:
+  push:
+    branches:
+      - direct-streaming
+    paths:
+      - ".github/workflows/self-benchmark.yml"
   workflow_dispatch:
     inputs:
       vus:
