@@ -10,7 +10,7 @@ use addon::{
     domain::TorrentRepository,
     http::{AppState, app},
     infrastructure::{
-        Budgets, Cache, EmptyRepository, Metrics, RateLimiter, Repository, Stores, init_best_trackers, logging, store,
+        Budgets, Cache, Metrics, RateLimiter, Repository, Stores, init_best_trackers, logging, store,
     },
     providers::{Context, Endpoints, Mochs, default_providers},
 };
@@ -46,16 +46,10 @@ async fn run() -> anyhow::Result<()> {
     logging::init();
     let metrics = Metrics::new();
     metrics.spawn_lag_sampler();
-    let direct_stream_only = env("DIRECT_STREAM_ONLY")
-        .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
-    let (repository, postgres_repository): (Arc<dyn TorrentRepository>, Option<Repository>) = if direct_stream_only {
-        tracing::info!("Direct-only mode enabled; PostgreSQL torrent repository is not initialized");
-        (Arc::new(EmptyRepository), None)
-    } else {
-        let database_url = env("DATABASE_URI").context("DATABASE_URI is required unless DIRECT_STREAM_ONLY=true")?;
-        let repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
-        (Arc::clone(&repository) as Arc<dyn TorrentRepository>, Some((*repository).clone()))
-    };
+    let database_url = env("DATABASE_URI").context("DATABASE_URI is required")?;
+    let repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
+    let postgres_repository = repository.clone();
+    let repository: Arc<dyn TorrentRepository> = repository;
 
     let mut invalidations = None;
     let stores = match env("MONGODB_URI") {
@@ -103,15 +97,10 @@ async fn run() -> anyhow::Result<()> {
         .map_or(Ok(IpAddr::V6(Ipv6Addr::UNSPECIFIED)), |host| host.parse())
         .context("HOST is not an ip address")?;
     let listener = TcpListener::bind(SocketAddr::new(host, port)).await?;
-    if direct_stream_only {
-        tracing::info!(port, "Started addon in direct-only mode");
-    }
-    if !direct_stream_only {
-        tokio::spawn(async move {
-            init_best_trackers().await;
-            tracing::info!(port, "Started addon");
-        });
-    }
+    tokio::spawn(async move {
+        init_best_trackers().await;
+        tracing::info!(port, "Started addon");
+    });
     axum::serve(
         listener,
         ServiceExt::<Request>::into_make_service_with_connect_info::<SocketAddr>(app(state, &static_dir)),
