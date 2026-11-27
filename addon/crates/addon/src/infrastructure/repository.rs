@@ -32,7 +32,7 @@ macro_rules! entries_sql {
     t."infoHash" AS t_info_hash, t."provider" AS t_provider, t."torrentId" AS t_torrent_id, t."title" AS t_title,
     t."size" AS t_size, t."type" AS t_type, t."uploadDate" AS t_upload_date, t."seeders" AS t_seeders,
     t."trackers" AS t_trackers, t."languages" AS t_languages, t."resolution" AS t_resolution
-    FROM "files" AS f LEFT OUTER JOIN "torrents" AS t ON f."infoHash" = t."infoHash"
+    FROM "files" AS f INNER JOIN "torrents" AS t ON f."infoHash" = t."infoHash"
     WHERE "#,
             $condition,
             r#" ORDER BY t."seeders" DESC LIMIT 500"#
@@ -239,5 +239,19 @@ impl TorrentRepository for Repository {
 
     fn pool_stats(&self) -> (u32, u32) {
         Repository::pool_stats(self)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::{IMDB_MOVIE_SQL, IMDB_SERIES_SQL, KITSU_MOVIE_SQL, KITSU_SERIES_SQL};
+
+    #[test]
+    fn entry_queries_only_rank_files_with_matching_torrents() {
+        for query in [IMDB_MOVIE_SQL, IMDB_SERIES_SQL, KITSU_MOVIE_SQL, KITSU_SERIES_SQL] {
+            assert!(query.contains(r#"INNER JOIN "torrents" AS t"#));
+            assert!(!query.contains("LEFT OUTER JOIN"));
+        }
     }
 }
