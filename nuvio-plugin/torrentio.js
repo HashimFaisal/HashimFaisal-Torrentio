@@ -89,7 +89,7 @@ function recordProvider(name, startedAt, ok, detail) {
     state.failures++; state.windowFailures++; state.consecutiveFailures++;
     state.lastError = str(detail && detail.message ? detail.message : detail || "provider failed").slice(0, 180);
     state.lastErrorKind = classifyProviderError(detail);
-    var statusMatch = state.lastError.match(/HTTP\\s+(\\d{3})/i);
+    var statusMatch = state.lastError.match(/HTTP\s+(\d{3})/i);
     state.lastStatusCode = statusMatch ? Number(statusMatch[1]) : 0;
     state.lastOutcome = state.lastErrorKind;
     state.lastFailureAt = Date.now();
@@ -581,6 +581,8 @@ async function getStreams(tmdbId, mediaType, season, episode) {
       " health=" + Object.keys(providerHealth).map(function(name) {
         var state = providerHealth[name];
         return name + ":" + state.successes + "/" + state.requests + "@" + state.lastLatencyMs + "ms" +
+          ":empty=" + state.emptyResponses + ":skipped=" + state.skippedRequests +
+          ":last=" + state.lastOutcome +
           (state.circuitOpenUntil > Date.now() ? ":cooldown" : "") +
           (state.lastErrorKind ? ":" + state.lastErrorKind : "");
       }).join(","));
