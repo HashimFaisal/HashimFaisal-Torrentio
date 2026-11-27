@@ -176,7 +176,7 @@ pub fn apply(streams: &[Stream], config: &Config, content_type: ContentType) -> 
     streams
         .iter()
         .filter(|stream| {
-            provider_allowed(&stream.title, providers)
+            (stream.name.starts_with("[HTTP]") || provider_allowed(&stream.title, providers))
                 && !is_excluded(stream, &preferences.qualities)
                 && size_limit.is_none_or(|limit| extract_size(&stream.title) <= limit)
         })
