@@ -242,7 +242,6 @@ impl TorrentRepository for Repository {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::{IMDB_MOVIE_SQL, IMDB_SERIES_SQL, KITSU_MOVIE_SQL, KITSU_SERIES_SQL};
