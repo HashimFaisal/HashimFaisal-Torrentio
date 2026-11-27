@@ -133,9 +133,8 @@ impl Addon {
             .wrap_stream(id, || async {
                 self.rate_limiter.charge(caller, Budget::Miss);
                 let records = self.db_limiter.run(self.records(content_type, id)).await?;
-                let streams = tokio::task::spawn_blocking(move || to_streams(records))
-                    .await
-                    .map_err(HandlerError::failed)?;
+                let streams =
+                    tokio::task::spawn_blocking(move || to_streams(records)).await.map_err(HandlerError::failed)?;
                 if streams.is_empty() {
                     self.rate_limiter.charge(caller, Budget::Empty);
                 }
