@@ -14,13 +14,14 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 - TMDB ID → IMDb ID resolution.
 - Exact IMDb/season/episode search through The RarBg API.
 - Verifies that the 40-character info hash matches the BTIH hash embedded in each magnet URI; malformed or mismatched pairs are discarded.
-- Rejects invalid/negative swarm counters, invalid sizes, duplicate hashes, and zero-seeder results.
+- Rejects fractional/negative/unsafe swarm counters, invalid sizes, duplicate hashes, zero-seeder results, and explicitly failed verification.
+- Computes metadata confidence from release-title consistency and available source/codec fields; if title and structured resolution disagree, it conservatively reports the lower resolution and flags the conflict.
 - Adaptive swarm search: tries 10 seeders first, then falls back to 5 and 1 only when fewer than five usable results are found.
 - Rejects multi-episode ranges and season packs to avoid starting the wrong file.
 - Computes a swarm-health score using seed supply, leecher demand, seed/leecher ratio, file size, and resolution. Leecher count is treated as demand/competition, not as extra capacity.
 - Retries transient network failures and HTTP 408/429/500/502/503/504 responses up to three attempts with bounded exponential backoff and honors numeric Retry-After hints; permanent 4xx errors fail immediately.
 - Caches TMDB-to-IMDb mappings for up to 6 hours and index responses for 90 seconds; concurrent identical requests share one in-flight request. The bounded cache avoids repeated lookups while keeping swarm data fresh.
-- Labels each result's swarm as healthy, contended, or thin for diagnostics.
+- Labels each result's swarm as healthy, contended, or thin for diagnostics and exposes a metadata-confidence score plus warning flags.
 - Prefers manageable releases on constrained connections when their swarm health is competitive. This is a source-selection heuristic, not a guarantee of playback speed or a measurement of actual throughput.
 - Nuvio's built-in P2P engine handles playback. This plugin does not host, proxy, or download media.
 
@@ -33,7 +34,7 @@ node --check torrentio.js
 node selftest.js
 ```
 
-The self-test covers adaptive search, movie lookup, exact episode filtering, season-pack rejection, swarm-aware ordering, magnet/info-hash integrity, short-lived caching, concurrent request coalescing, transient API recovery, and permanent-error fast-fail.
+The self-test covers adaptive search, movie lookup, exact episode filtering, season-pack rejection, swarm-aware ordering, magnet/info-hash integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error fast-fail, metadata confidence, resolution conflict handling, and invalid metadata rejection.
 
 ## Source and limitations
 
