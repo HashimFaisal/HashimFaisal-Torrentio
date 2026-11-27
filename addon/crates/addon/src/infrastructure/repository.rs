@@ -176,12 +176,16 @@ impl Repository {
     }
 
     async fn connection(&self) -> Result<PoolConnection<Postgres>> {
+        let started = Instant::now();
         let mut acquire = Box::pin(self.pool.acquire());
         if let Some(connection) = (&mut acquire).now_or_never() {
+            self.metrics.observe_pool_acquire(started.elapsed());
             return connection;
         }
         let _waiting = self.metrics.pool_waiting();
-        acquire.await
+        let connection = acquire.await;
+        self.metrics.observe_pool_acquire(started.elapsed());
+        connection
     }
 
     async fn fetch_all<'q, O>(&self, query: Query<'q, O>) -> Result<Vec<O>>
