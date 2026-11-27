@@ -46,7 +46,6 @@ async fn run() -> anyhow::Result<()> {
     metrics.spawn_lag_sampler();
     let database_url = env("DATABASE_URI").context("DATABASE_URI is required")?;
     let repository = Arc::new(Repository::connect(&database_url, metrics.clone())?);
-    let postgres_repository = repository.clone();
     let repository: Arc<dyn TorrentRepository> = repository;
 
     let mut invalidations = None;
@@ -110,9 +109,7 @@ async fn run() -> anyhow::Result<()> {
     }
     rate_limit_sync.stop().await;
     rate_limiter.flush().await;
-    if let Some(repository) = postgres_repository {
-        repository.close().await;
-    }
+    repository.close().await;
     cache.drain().await;
     Ok(())
 }
