@@ -44,6 +44,6 @@ export default function () {
   const client = iteration + 1;
   const ip = `10.${Math.floor(client / 65536) % 256}.${Math.floor(client / 256) % 256}.${client % 256}`;
   const config = __ENV.CONFIG ? `${encodeURIComponent(__ENV.CONFIG)}/` : '';
-  const res = http.get(`${__ENV.BASE}/${config}stream/${type}/${encodeURIComponent(id)}.json`, { headers: { 'x-forwarded-for': ip } });
+  const res = http.get(`${__ENV.BASE}/${config}stream/${type}/${encodeURIComponent(id)}.json`, { headers: { 'x-real-ip': ip } });
   check(res, { ok: r => r.status === 200 });
 }
