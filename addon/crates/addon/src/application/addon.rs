@@ -1,7 +1,5 @@
 use std::collections::HashSet;
-use std::sync::{Arc, LazyLock};
-
-use regex::Regex;
+use std::sync::Arc;
 use serde::Serialize;
 
 use crate::{
@@ -28,12 +26,6 @@ const STALE_ERROR_AGE: u32 = 7 * 24 * 60 * 60;
 const REQUEST_QUEUE_CONCURRENCY: usize = 200;
 const DB_CONCURRENCY: usize = 50;
 const DEFAULT_CACHE_MAX_AGE: u32 = 60 * 60;
-
-static IMDB_ANYWHERE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)tt[0-9]+").expect("valid regex"));
-static KITSU_ANYWHERE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)kitsu:[0-9]+").expect("valid regex"));
-static IMDB_SERIES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^tt[0-9]+:[0-9]+:[0-9]+$").expect("valid regex"));
-static IMDB_MOVIE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^tt[0-9]+$").expect("valid regex"));
-static KITSU: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^kitsu:[0-9]+(?::[0-9]+)?$").expect("valid regex"));
 
 #[derive(Serialize)]
 pub struct CatalogResponse {
@@ -105,7 +97,7 @@ impl Addon {
         else {
             return Ok(StreamsResponse::default());
         };
-        if !IMDB_ANYWHERE.is_match(id) && !KITSU_ANYWHERE.is_match(id) {
+        if !contains_imdb_id(id) && !contains_kitsu_id(id) {
             return Ok(StreamsResponse::default());
         }
         let cached = if let Some(streams) = self.cache.streams_in_memory(id).await {
@@ -154,14 +146,14 @@ impl Addon {
     }
 
     async fn series_records(&self, id: &str) -> Result<Vec<Record>, anyhow::Error> {
-        if IMDB_SERIES.is_match(id) {
+        if is_imdb_series(id) {
             let mut parts = id.split(':');
             let imdb_id = parts.next().unwrap_or_default();
             let season = parts.next().and_then(|part| part.parse().ok()).unwrap_or(1);
             let episode = parts.next().and_then(|part| part.parse().ok()).unwrap_or(1);
             return self.repository.imdb_series_entries(imdb_id, season, episode).await;
         }
-        if KITSU.is_match(id) {
+        if is_kitsu_id(id) {
             let mut parts = id.split(':');
             let kitsu_id = parts.nth(1).and_then(|part| part.parse().ok()).unwrap_or_default();
             return match parts.next().and_then(|part| part.parse().ok()) {
@@ -173,10 +165,10 @@ impl Addon {
     }
 
     async fn movie_records(&self, id: &str) -> Result<Vec<Record>, anyhow::Error> {
-        if IMDB_MOVIE.is_match(id) {
+        if is_imdb_movie(id) {
             return self.repository.imdb_movie_entries(id).await;
         }
-        if KITSU.is_match(id) {
+        if is_kitsu_id(id) {
             return self.series_records(id).await;
         }
         Ok(Vec::new())
@@ -217,6 +209,58 @@ impl Addon {
         let cache_max_age = if meta.no_cache { 0 } else { self.cache_max_age };
         Ok(MetaResponse { meta, cache_max_age })
     }
+}
+
+fn contains_imdb_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.windows(2).enumerate().any(|(index, pair)| {
+        pair.eq_ignore_ascii_case(b"tt")
+            && bytes.get(index + 2).is_some_and(u8::is_ascii_digit)
+    })
+}
+
+fn contains_kitsu_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.windows(6).enumerate().any(|(index, prefix)| {
+        prefix.eq_ignore_ascii_case(b"kitsu:")
+            && bytes.get(index + 6).is_some_and(u8::is_ascii_digit)
+    })
+}
+
+fn is_digits(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn is_imdb_series(value: &str) -> bool {
+    let mut parts = value.split(':');
+    matches!(
+        (parts.next(), parts.next(), parts.next(), parts.next()),
+        (Some(id), Some(season), Some(episode), None)
+            if id.strip_prefix("tt").is_some_and(is_digits)
+                && is_digits(season)
+                && is_digits(episode)
+    )
+}
+
+fn is_imdb_movie(value: &str) -> bool {
+    value.strip_prefix("tt").is_some_and(is_digits)
+}
+
+fn is_kitsu_id(value: &str) -> bool {
+    let Some((prefix, suffix)) = value.split_at_checked(6) else {
+        return false;
+    };
+    if !prefix.eq_ignore_ascii_case("kitsu:") {
+        return false;
+    }
+    let mut parts = suffix.split(':');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(id), None, None) if is_digits(id)
+    ) || matches!(
+        (suffix.split(':').next(), suffix.split(':').nth(1), suffix.split(':').nth(2)),
+        (Some(id), Some(episode), None) if is_digits(id) && is_digits(episode)
+    )
 }
 
 fn to_streams(records: Vec<Record>) -> Vec<Stream> {
@@ -682,6 +726,23 @@ mod tests {
         assert!(matches!(harness.addon.meta("torbox:denied", &config).await, Err(HandlerError::NotFound)));
         assert_eq!(harness.addon.mochs().blacklist_size(), 0);
     }
+    #[test]
+    fn identifier_parsers_preserve_regex_matching_semantics() {
+        for value in ["tt123", "prefix-TT123-suffix", "kitsu:42", "KITSU:42:3", "prefix-kitsu:42"] {
+            assert!(contains_imdb_id(value) || contains_kitsu_id(value), "{value}");
+        }
+        assert!(!contains_imdb_id("tt"));
+        assert!(!contains_kitsu_id("kitsu:"));
+        assert!(is_imdb_movie("tt123"));
+        assert!(!is_imdb_movie("TT123"));
+        assert!(is_imdb_series("tt123:2:4"));
+        assert!(!is_imdb_series("tt123:2"));
+        assert!(is_kitsu_id("kitsu:42"));
+        assert!(is_kitsu_id("KITSU:42:3"));
+        assert!(!is_kitsu_id("kitsu:42:3:1"));
+        assert!(!is_kitsu_id("kitsu:"));
+    }
+
     #[test]
     fn deduplicates_same_hash_and_file_index_after_preferring_better_seeders() {
         let mut weaker = record("abc", "Movie.2020.720p.WEB-DL.x264-GRP", 5);
