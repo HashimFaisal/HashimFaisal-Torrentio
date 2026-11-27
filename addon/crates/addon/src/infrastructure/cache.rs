@@ -351,15 +351,19 @@ impl Cache {
 
     async fn availability_many(&self, prefix: String, info_hashes: &[String]) -> HashMap<String, Value> {
         let Some(store) = &self.stores.availability else { return HashMap::new() };
-        let keys: Vec<String> = info_hashes.iter().map(|info_hash| format!("{prefix}:{info_hash}")).collect();
+        let unique_hashes = unique_info_hashes(info_hashes);
+        if unique_hashes.is_empty() {
+            return HashMap::new();
+        }
+        let keys: Vec<String> = unique_hashes.iter().map(|info_hash| format!("{prefix}:{info_hash}")).collect();
         let timer = self.metrics.cache_timer("getMany");
         let result = store.get_many::<Value>(&keys).await;
         timer.finish();
         match result {
-            Ok(values) => info_hashes
-                .iter()
+            Ok(values) => unique_hashes
+                .into_iter()
                 .zip(values)
-                .filter_map(|(info_hash, value)| value.filter(is_truthy).map(|value| (info_hash.clone(), value)))
+                .filter_map(|(info_hash, value)| value.filter(is_truthy).map(|value| (info_hash.to_owned(), value)))
                 .collect(),
             Err(error) => {
                 tracing::warn!(%error, "Failed retrieve availability cache");
@@ -367,6 +371,13 @@ impl Cache {
             }
         }
     }
+}
+
+fn unique_info_hashes(info_hashes: &[String]) -> Vec<&str> {
+    let mut unique: Vec<&str> = info_hashes.iter().map(String::as_str).collect();
+    unique.sort_unstable();
+    unique.dedup();
+    unique
 }
 
 fn stream_key(id: &str) -> String {
@@ -480,6 +491,12 @@ mod tests {
         assert!((gauge("memory_cache_entries") - 1.0).abs() < f64::EPSILON, "{rendered}");
         let bytes = gauge("memory_cache_bytes");
         assert_eq!(bytes, expected_bytes as f64, "{rendered}");
+    }
+
+    #[test]
+    fn availability_hashes_are_deduplicated_before_store_reads() {
+        let hashes = vec!["b".to_owned(), "a".to_owned(), "b".to_owned(), "c".to_owned()];
+        assert_eq!(unique_info_hashes(&hashes), vec!["a", "b", "c"]);
     }
 
     #[test]
