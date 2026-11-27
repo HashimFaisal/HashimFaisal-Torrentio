@@ -12,7 +12,11 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 
 - Multi-source search: The RarBg, YTS (movies), and EZTV (TV) are queried concurrently. A failure or malformed response from one provider is isolated and does not discard results returned by the others.
 - Provider-aware result merging: exact matching BTIH hashes are consolidated across providers, preserving alternate titles and all contributing provider labels without merging different payloads.
-- Per-provider runtime health counters track request count, successes, failures, result counts, and last observed latency in diagnostic logs.
+- Per-provider health monitoring tracks request totals, rolling response latency, recent failure rate, consecutive failures, last error category, and recovery timestamps.
+- Automatic circuit breaker: after three consecutive provider failures, that catalog is skipped for 60 seconds; after cooldown, one half-open probe is allowed to test recovery. Other catalogs continue normally.
+- Automatic weak / medium / fast selection uses recent catalog response latency and recent provider failure rate as a conservative responsiveness signal. It is not a bandwidth test and does not claim to measure P2P throughput.
+- Network profiles change ranking: weak favors smaller 720p/480p releases, medium balances 720p/1080p, and fast can favor 1080p/2160p. Each result is labeled as recommended-size or large-for-profile using profile-specific movie/episode size targets.
+- Structured diagnostics count invalid/missing info hashes, malformed or mismatched magnets, missing swarm counters, invalid sizes, failed verification, wrong episodes/packs, and implausible sizes. Provider-level errors are classified as HTTP client/server, malformed index response, timeout, or network failure.
 - Short-lived provider response caching (2 minutes) limits repeat lookups while allowing swarm metadata to refresh.
 
 - Movies and exact TV episodes.
@@ -30,7 +34,7 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 - Retries transient network failures and HTTP 408/429/500/502/503/504 responses up to three attempts with bounded exponential backoff and honors numeric Retry-After hints; permanent 4xx errors fail immediately.
 - Caches TMDB-to-IMDb mappings for up to 6 hours and index responses for 90 seconds; concurrent identical requests share one in-flight request. The bounded cache avoids repeated lookups while keeping swarm data fresh.
 - Labels each result's swarm as healthy, contended, or thin for diagnostics and exposes a metadata-confidence score plus warning flags.
-- Prefers manageable releases on constrained connections when their swarm health is competitive. This is a source-selection heuristic, not a guarantee of playback speed or a measurement of actual throughput.
+- Prefers manageable releases on constrained connections when their swarm health is competitive. This is a source-selection heuristic, not a guarantee of playback speed or a measurement of actual throughput. The automatic profile uses catalog API responsiveness as a proxy only; real download speed, peer throughput, buffering, and P2P health require telemetry from Nuvio's native playback engine.
 - Nuvio's built-in P2P engine handles playback. This plugin does not host, proxy, or download media.
 
 ## Local tests
@@ -42,7 +46,7 @@ node --check torrentio.js
 node selftest.js
 ```
 
-The self-test fixtures cover parallel provider fan-out, provider failure isolation, YTS movie mapping, EZTV exact-episode mapping, cross-provider BTIH consolidation, adaptive The RarBg search, hexadecimal/Base32 BTIH normalization and magnet integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error handling, metadata confidence, resolution conflict handling, and invalid metadata rejection. These fixtures have been updated for the multi-provider release but have intentionally not been executed yet.
+The self-test fixtures cover parallel provider fan-out, provider failure isolation, YTS movie mapping, EZTV exact-episode mapping, cross-provider BTIH consolidation, adaptive The RarBg search, hexadecimal/Base32 BTIH normalization and magnet integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error handling, metadata confidence, resolution conflict handling, and invalid metadata rejection. Fixtures are maintained for provider fan-out, failure isolation, cooldown recovery behavior, adaptive network scoring, and structured validation. They have intentionally not been executed yet for this development pass.
 
 ## Source and limitations
 
