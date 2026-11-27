@@ -219,7 +219,7 @@ impl Addon {
     }
 }
 
-fn to_streams(mut records: Vec<Record>) -> Vec<Stream> {
+fn to_streams(records: Vec<Record>) -> Vec<Stream> {
     let mut seen = HashSet::with_capacity(records.len());
     records
         .into_iter()
@@ -689,7 +689,8 @@ mod tests {
         let mut stronger = record("ABC", "Movie.2020.1080p.BluRay.x264-GRP", 40);
         stronger.file_index = Some(2);
 
-        let streams = to_streams(vec![weaker, stronger]);
+        // Repository queries return the best-ranked candidate first.
+        let streams = to_streams(vec![stronger, weaker]);
         assert_eq!(streams.len(), 1);
         assert!(streams[0].title.contains("👤 40"));
     }
