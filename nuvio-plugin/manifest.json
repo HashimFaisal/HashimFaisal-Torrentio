@@ -1,14 +1,14 @@
 {
-  "name": "Torrentio Local",
-  "version": "0.4.5",
-  "description": "Multi-source torrent discovery with provider circuit breakers with single-probe recovery, auth/endpoint/rate-limit aware cooldowns, adaptive network profiles, latency monitoring, structured diagnostics, release-title metadata inference, and resilient parallel search with defensive quality-score validation and merged diagnostic preservation.",
+  "name": "Torrentio Local Beta",
+  "version": "0.5.0-beta.1",
+  "description": "Beta: faster adaptive multi-source torrent discovery, resilient parallel fallback search, stale-while-revalidate caching, provider isolation, and network-aware ranking. Nuvio handles P2P playback.",
   "author": "HashimFaisal",
   "scrapers": [
     {
-      "id": "torrentio-local",
-      "name": "Torrentio Local",
-      "description": "Adaptive multi-catalog movie and TV torrent discovery with automatic provider cooldown, network-aware ranking, structured failure diagnostics, and metadata validation. Nuvio handles P2P playback.",
-      "version": "0.4.5",
+      "id": "torrentio-local-beta",
+      "name": "Torrentio Local Beta",
+      "description": "Beta adaptive multi-catalog movie and TV torrent discovery with concurrent fallback tiers, resilient provider isolation, and network-aware ranking. Nuvio handles P2P playback.",
+      "version": "0.5.0-beta.1",
       "filename": "torrentio.js",
       "supportedTypes": [
         "movie",
