@@ -14,6 +14,8 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 - TMDB ID → IMDb ID resolution.
 - Exact IMDb/season/episode search through The RarBg API.
 - Verifies that the 40-character info hash matches the BTIH hash embedded in each magnet URI; malformed or mismatched pairs are discarded.
+- Consolidates repeated API rows by exact `infoHash`, including duplicates encountered across adaptive search thresholds. The merged result keeps the strongest metadata confidence and swarm counters, fills missing source/codec details, and records alternate release titles.
+- Does not merge different info hashes solely because their titles look similar; distinct torrent payloads remain separate choices.
 - Rejects fractional/negative/unsafe swarm counters, invalid sizes, duplicate hashes, zero-seeder results, and explicitly failed verification. Unchecked states such as `unknown`, `cant_check`, and `retried` are retained with a lower confidence score; only a definitive `failed` verdict is discarded.
 - Computes metadata confidence from release-title consistency and available source/codec fields; if title and structured resolution disagree, it conservatively reports the lower resolution and flags the conflict.
 - Adaptive swarm search: tries 10 seeders first, then falls back to 5 and 1 only when fewer than five usable results are found.
@@ -34,7 +36,7 @@ node --check torrentio.js
 node selftest.js
 ```
 
-The self-test covers adaptive search, movie lookup, exact episode filtering, season-pack rejection, swarm-aware ordering, magnet/info-hash integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error fast-fail, metadata confidence, resolution conflict handling, and invalid metadata rejection.
+The self-test covers adaptive search, movie lookup, exact episode filtering, season-pack rejection, swarm-aware ordering, magnet/info-hash integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error fast-fail, metadata confidence, resolution conflict handling, invalid metadata rejection, same-infoHash duplicate consolidation, and cross-threshold metadata merging.
 
 ## Source and limitations
 
