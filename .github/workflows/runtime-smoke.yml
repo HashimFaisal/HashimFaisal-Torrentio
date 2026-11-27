@@ -15,22 +15,49 @@ permissions:
 jobs:
   container-smoke:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: smoke
+          POSTGRES_PASSWORD: smoke
+          POSTGRES_DB: torrentio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smoke -d torrentio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Initialize disposable PostgreSQL fixture
+        env:
+          PGPASSWORD: smoke
+        run: |
+          psql -v ON_ERROR_STOP=1 \
+            "postgres://smoke:smoke@127.0.0.1:5432/torrentio" \
+            -f addon/bench/fixtures/runtime-smoke.sql
 
       - name: Build runtime image
         run: docker build -t torrentio-addon-smoke ./addon
 
-      - name: Start addon with lazy PostgreSQL connection
+      - name: Start addon against PostgreSQL
         run: |
           docker run -d --name torrentio-addon-smoke \
-            -e DATABASE_URI=postgres://smoke:smoke@127.0.0.1:1/torrentio \
-            -e HOST=0.0.0.0 \
+            --network host \
+            -e DATABASE_URI=postgres://smoke:smoke@127.0.0.1:5432/torrentio \
+            -e HOST=127.0.0.1 \
             -e PORT=7000 \
-            -p 127.0.0.1:7000:7000 \
             torrentio-addon-smoke
 
-      - name: Verify HTTP startup, manifest, and configure page
+      - name: Verify HTTP startup, manifest, configure, and real torrent lookup
         run: |
           cleanup() {
             docker logs torrentio-addon-smoke || true
@@ -50,3 +77,19 @@ jobs:
 
           curl --fail --silent http://127.0.0.1:7000/configure -o /tmp/configure.html
           grep -qi '<html' /tmp/configure.html
+
+          for attempt in $(seq 1 15); do
+            if curl --fail --silent \
+              http://127.0.0.1:7000/stream/movie/tt1234567.json \
+              -o /tmp/streams.json; then
+              break
+            fi
+            sleep 2
+          done
+
+          test -s /tmp/streams.json
+          jq -e '
+            (.streams | type == "array") and
+            (.streams | length > 0) and
+            any(.streams[]; .infoHash == "0123456789abcdef0123456789abcdef01234567")
+          ' /tmp/streams.json
