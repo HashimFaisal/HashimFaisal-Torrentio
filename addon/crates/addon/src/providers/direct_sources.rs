@@ -232,8 +232,8 @@ mod tests {
     #[tokio::test]
     async fn requests_the_configured_api_with_identifier_and_optional_bearer_key() {
         use wiremock::{
-            matchers::{header, method, path, query_param},
             Mock, MockServer, ResponseTemplate,
+            matchers::{header, method, path, query_param},
         };
 
         let server = MockServer::start().await;
@@ -263,8 +263,8 @@ mod tests {
     #[tokio::test]
     async fn rejects_oversized_api_responses() {
         use wiremock::{
-            matchers::{method, path},
             Mock, MockServer, ResponseTemplate,
+            matchers::{method, path},
         };
 
         let server = MockServer::start().await;
