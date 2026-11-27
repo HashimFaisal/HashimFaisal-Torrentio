@@ -213,7 +213,10 @@ function mergeSameHash(existing, incoming) {
   merged.seeders = Math.max(existing.seeders, incoming.seeders);
   merged.peers = Math.max(existing.peers, incoming.peers);
   merged.networkScore = Math.max(existing.networkScore, incoming.networkScore);
+  merged.qualityScore = Math.max(existing.qualityScore || 0, incoming.qualityScore || 0);
   merged.swarmHealth = swarm.swarmHealth;
+  merged.name = "The RarBg · " + merged.quality + " · " + merged.seeders + " seeds" +
+    (merged.qualityScore ? " · Q" + merged.qualityScore : "");
   merged.metadataConfidence = Math.max(existing.metadataConfidence, incoming.metadataConfidence);
   merged.metadataWarnings = (preferred.metadataWarnings || []).slice();
   merged.source = preferred.source || existing.source || incoming.source || "";
