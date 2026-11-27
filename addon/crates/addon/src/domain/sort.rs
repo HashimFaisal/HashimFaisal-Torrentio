@@ -198,7 +198,11 @@ fn find_resolution(description: &str) -> Option<&str> {
         while index < bytes.len() && bytes[index].is_ascii_digit() {
             index += 1;
         }
-        if index < bytes.len() && bytes[index] == b'p' {
+        let has_left_boundary = start == 0 || !bytes[start - 1].is_ascii_alphanumeric();
+        let has_resolution_suffix = index < bytes.len() && bytes[index] == b'p';
+        let end = index + usize::from(has_resolution_suffix);
+        let has_right_boundary = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
+        if has_left_boundary && has_resolution_suffix && has_right_boundary {
             return description.get(start..=index);
         }
     }
@@ -236,6 +240,15 @@ mod tests {
         assert_eq!(extract_quality("Torrentio\n4k"), "2160p");
         assert_eq!(extract_quality("Torrentio\nBluRay"), Quality::Other.label());
         assert_eq!(extract_quality("Torrentio\nCAM"), Quality::Cam.label());
+    }
+
+    #[test]
+    fn resolution_extraction_requires_a_complete_token() {
+        assert_eq!(find_resolution("Movie.1080p.BluRay"), Some("1080p"));
+        assert_eq!(find_resolution("Movie_2160p-HDR"), Some("2160p"));
+        assert_eq!(find_resolution("foo1080p"), None);
+        assert_eq!(find_resolution("1080pfoo"), None);
+        assert_eq!(find_resolution("1080foo720p"), None);
     }
 
     #[test]
