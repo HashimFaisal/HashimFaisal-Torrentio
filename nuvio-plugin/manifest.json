@@ -1,0 +1,17 @@
+{
+  "name": "Torrentio Local",
+  "version": "0.1.0",
+  "description": "Local Nuvio plugin for quality-ranked movie and exact-episode torrent metadata.",
+  "author": "HashimFaisal",
+  "scrapers": [{
+    "id": "torrentio-local",
+    "name": "Torrentio Local",
+    "description": "Movie and TV torrent results via The RarBg public API; playback uses Nuvio P2P.",
+    "version": "0.1.0",
+    "filename": "nuvio-plugin/torrentio.js",
+    "supportedTypes": ["movie", "tv"],
+    "enabled": true,
+    "contentLanguage": ["en", "ar"],
+    "formats": ["mkv", "mp4", "avi", "webm"]
+  }]
+}
