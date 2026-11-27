@@ -42,7 +42,7 @@ node --check torrentio.js
 node selftest.js
 ```
 
-The self-test covers adaptive search, movie lookup, exact episode filtering, season-pack rejection, swarm-aware ordering, hexadecimal/Base32 BTIH normalization and magnet/info-hash integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error fast-fail, metadata confidence, resolution conflict handling, invalid metadata rejection, same-infoHash duplicate consolidation, and cross-threshold metadata merging.
+The self-test fixtures cover parallel provider fan-out, provider failure isolation, YTS movie mapping, EZTV exact-episode mapping, cross-provider BTIH consolidation, adaptive The RarBg search, hexadecimal/Base32 BTIH normalization and magnet integrity, short-lived caching, concurrent request coalescing, transient API recovery, permanent-error handling, metadata confidence, resolution conflict handling, and invalid metadata rejection. These fixtures have been updated for the multi-provider release but have intentionally not been executed yet.
 
 ## Source and limitations
 
