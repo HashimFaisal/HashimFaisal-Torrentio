@@ -133,9 +133,9 @@ function isPack(name) {
   var title = str(name);
   // Reject season packs and multi-episode releases: matching the first
   // episode token must not make a batch look like a single episode.
-  return /\\bS\\d{1,2}E\\d{1,3}(?:\\s*[-–]\\s*(?:S\\d{1,2})?E?\\d{1,3}|E\\d{1,3})/i.test(title) ||
-    /\\b\\d{1,2}x\\d{1,3}\\s*[-–]\\s*\\d{1,2}x?\\d{1,3}/i.test(title) ||
-    /\\b(?:complete|season pack|batch)\\b/i.test(title);
+  return /\bS\d{1,2}E\d{1,3}(?:\s*[-–]\s*(?:S\d{1,2})?E?\d{1,3}|E\d{1,3})/i.test(title) ||
+    /\b\d{1,2}x\d{1,3}\s*[-–]\s*\d{1,2}x?\d{1,3}/i.test(title) ||
+    /\b(?:complete|season pack|batch)\b/i.test(title);
 }
 function exactEpisode(item, season, episode) {
   if (isPack(item.name)) return false;
