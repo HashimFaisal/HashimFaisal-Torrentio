@@ -1,14 +1,14 @@
 {
   "name": "Torrentio Local Beta",
-  "version": "0.5.0-beta.2",
-  "description": "Beta 2: concurrent torrent catalog tiers, bounded upstream waits, resilient provider isolation, stale-while-revalidate caching, and network-aware ranking. Nuvio handles P2P playback.",
+  "version": "0.5.0-beta.3",
+  "description": "Beta 3: parallel torrent source tiers with 3.5-second upstream deadlines and short transient retry, resilient provider isolation, and adaptive result ranking. Nuvio handles P2P playback.",
   "author": "HashimFaisal",
   "scrapers": [
     {
       "id": "torrentio-local-beta",
       "name": "Torrentio Local Beta",
-      "description": "Beta 2 faster concurrent multi-catalog movie and TV torrent discovery with bounded request timeouts and network-aware ranking. Nuvio handles P2P playback.",
-      "version": "0.5.0-beta.2",
+      "description": "Beta 3 fast parallel multi-catalog movie and TV torrent discovery with bounded upstream waits. Nuvio handles P2P playback.",
+      "version": "0.5.0-beta.3",
       "filename": "torrentio.js",
       "supportedTypes": [
         "movie",
