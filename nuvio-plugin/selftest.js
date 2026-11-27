@@ -182,8 +182,8 @@ const {getStreams}=require("./torrentio.js");
     "primary retries and both adaptive fallback tiers should complete");
   assert.ok(recoveredSearches.some(x=>x.includes("min_seeders=5")));
   assert.ok(recoveredSearches.some(x=>x.includes("min_seeders=1")));
-  assert.equal(recoveredSearches[0],recoveredSearches[1]);
-  assert.equal(recoveredSearches[1],recoveredSearches[2]);
+  assert.deepEqual(recoveredSearches.slice(0,3).map(x=>Number((x.match(/min_seeders=(\\d+)/)||[])[1])).sort((a,b)=>b-a),[10,5,1],
+    "all three seed thresholds should start immediately before transient retries");
 
   // A failed fallback tier must not discard useful results from the other tier.
   mode="fallback-one-fails"; calls.length=0;
