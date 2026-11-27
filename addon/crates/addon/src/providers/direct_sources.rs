@@ -27,7 +27,7 @@ pub(crate) struct DirectSources {
 }
 
 impl DirectSources {
-    /// Enables the adapter only when DIRECT_STREAM_API_URL is a valid HTTPS URL.
+    /// Enables the adapter only when `DIRECT_STREAM_API_URL` is a valid HTTPS URL.
     /// Redirects are disabled so a configured endpoint cannot silently redirect
     /// requests to an unexpected host or an internal network address.
     pub(crate) fn from_env() -> Option<Self> {
@@ -130,7 +130,11 @@ fn validate_stream(mut stream: Stream, allow_http: bool) -> Option<Stream> {
 
 fn is_non_public_host(host: &str) -> bool {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
-    if host == "localhost" || host.ends_with(".localhost") || host.ends_with(".local") || host.ends_with(".internal") {
+    if host == "localhost"
+        || host.ends_with(".localhost")
+        || host.rsplit_once('.').is_some_and(|(_, suffix)| suffix == "local")
+        || host.ends_with(".internal")
+    {
         return true;
     }
 
