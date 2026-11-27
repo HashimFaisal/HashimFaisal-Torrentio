@@ -532,18 +532,45 @@ async function queryEztv(imdbId) {
     });
   });
 }
+function retryableLookupError(error) {
+  var message = str(error && error.message ? error.message : error);
+  var match = message.match(/HTTP\\s+(\\d{3})/i);
+  var status = match ? Number(match[1]) : 0;
+  return status === 408 || status === 429 || status === 500 ||
+    status === 502 || status === 503 || status === 504 ||
+    /timeout|timed out|network|fetch failed|socket|dns/i.test(message);
+}
 async function queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, profile) {
-  // Keep the common path to one upstream request. If the high-seeder query is
-  // sparse, fetch both fallback tiers together instead of waiting serially.
-  var primary = await queryIndex(imdbId, kind, season, episode, 10);
-  var batches = [toStreams(primary, kind, season, episode, diagnostics, profile)];
-  if (batches[0].length < 5) {
-    var fallbackRows = await Promise.all([
-      queryIndex(imdbId, kind, season, episode, 5),
-      queryIndex(imdbId, kind, season, episode, 1)
+  // Use the high-quality tier first. A sparse or transiently failed primary
+  // lookup unlocks two concurrent fallback tiers; one failed tier must not
+  // discard useful results returned by the other.
+  var batches = [], primaryError = null;
+  try {
+    var primary = await queryIndex(imdbId, kind, season, episode, 10);
+    batches.push(toStreams(primary, kind, season, episode, diagnostics, profile));
+  } catch (error) {
+    primaryError = error;
+    if (!retryableLookupError(error)) throw error;
+    recordDiagnostic(diagnostics, "primary-index-temporarily-unavailable");
+  }
+  if (!batches.length || batches[0].length < 5) {
+    var fallbackResults = await Promise.all([
+      queryIndex(imdbId, kind, season, episode, 5).then(
+        function(rows) { return { ok: true, rows: rows }; },
+        function(error) { return { ok: false, error: error }; }),
+      queryIndex(imdbId, kind, season, episode, 1).then(
+        function(rows) { return { ok: true, rows: rows }; },
+        function(error) { return { ok: false, error: error }; })
     ]);
-    for (var f = 0; f < fallbackRows.length; f++) {
-      batches.push(toStreams(fallbackRows[f], kind, season, episode, diagnostics, profile));
+    for (var f = 0; f < fallbackResults.length; f++) {
+      if (fallbackResults[f].ok) {
+        batches.push(toStreams(fallbackResults[f].rows, kind, season, episode, diagnostics, profile));
+      } else {
+        recordDiagnostic(diagnostics, "fallback-index-tier-failed");
+      }
+    }
+    if (primaryError && !fallbackResults.some(function(result) { return result.ok; })) {
+      throw primaryError;
     }
   }
   var collected = [], seen = Object.create(null);
