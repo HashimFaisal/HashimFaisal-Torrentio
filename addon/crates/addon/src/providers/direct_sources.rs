@@ -36,7 +36,8 @@ impl DirectSources {
             Ok(url) if url.scheme() == "https"
                 && url.host_str().is_some()
                 && url.username().is_empty()
-                && url.password().is_none() => url,
+                && url.password().is_none()
+                && !is_non_public_host(url.host_str().unwrap_or_default()) => url,
             Ok(_) => {
                 tracing::warn!("DIRECT_STREAM_API_URL must be an HTTPS URL without credentials");
                 return None;
@@ -93,6 +94,7 @@ impl DirectSources {
 
         let streams = payload.streams.into_iter()
             .filter_map(validate_stream)
+            .take(20)
             .collect::<Vec<_>>();
         Ok(streams)
     }
