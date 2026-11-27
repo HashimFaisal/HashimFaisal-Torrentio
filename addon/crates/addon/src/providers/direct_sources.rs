@@ -163,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_public_http_and_https_playback_urls() {
+    fn accepts_https_and_requires_opt_in_for_http() {
         assert!(validate_stream(stream("https://cdn.example/video.m3u8"), false).is_some());
         assert!(validate_stream(stream("http://media.example/video.mp4"), false).is_none());
         assert!(validate_stream(stream("http://media.example/video.mp4"), true).is_some());
@@ -205,11 +205,11 @@ mod tests {
     #[test]
     fn parses_stremio_compatible_direct_api_payload() {
         let payload: DirectApiResponse = serde_json::from_str(
-            r#"{"streams":[{"name":"Example CDN\\n1080p","title":"Movie.2024.1080p.WEB-DL","url":"https://cdn.example/movie.m3u8"}]}"#,
+            r#"{"streams":[{"name":"Example CDN\n1080p","title":"Movie.2024.1080p.WEB-DL","url":"https://cdn.example/movie.m3u8"}]}"#,
         )
         .unwrap();
         let result = validate_stream(payload.streams.into_iter().next().unwrap(), false).unwrap();
-        assert_eq!(result.name, "[HTTP] Example CDN\\n1080p");
+        assert_eq!(result.name, "[HTTP] Example CDN\n1080p");
         assert_eq!(result.url.as_deref(), Some("https://cdn.example/movie.m3u8"));
     }
 
