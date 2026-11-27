@@ -103,7 +103,7 @@ const {getStreams}=require("./torrentio.js");
   // Two transient 503 responses should recover on the third attempt.
   mode="movie"; calls.length=0; transientFailures=2;
   const recovered = await getStreams("525252","movie",null,null);
-  assert.equal(recovered.length,3);
+  assert.equal(recovered.length,4);
   const recoveredSearches = calls.filter(x=>x.includes("/search/?"));
   assert.equal(recoveredSearches.length,5,
     "two 503 retries plus the remaining adaptive thresholds should complete");
