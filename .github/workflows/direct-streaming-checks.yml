@@ -1,4 +1,4 @@
-name: Direct Streaming Checks
+name: Torrent Engine Quality Checks
 
 on:
   push:
