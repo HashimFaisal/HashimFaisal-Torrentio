@@ -220,11 +220,6 @@ impl Addon {
 }
 
 fn to_streams(mut records: Vec<Record>) -> Vec<Stream> {
-    records.sort_by(|a, b| {
-        let seeders = |record: &Record| i64::from(record.torrent.seeders.unwrap_or(0));
-        seeders(b).cmp(&seeders(a)).then_with(|| b.torrent.upload_date.cmp(&a.torrent.upload_date))
-    });
-
     let mut seen = HashSet::with_capacity(records.len());
     records
         .into_iter()
