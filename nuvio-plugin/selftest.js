@@ -75,7 +75,10 @@ global.fetch = async (url) => {
   ] : [
     {name:"Breaking.Bad.S01E01.Pilot.1080p",infoHash:hash("b"),magnet:"magnet:?xt=urn:btih:"+hash("b"),seeders:50,resolution:"1080p",season:1,episode:1,size:1500000000},
     {name:"Breaking.Bad.S01E01-07.PACK",infoHash:hash("c"),magnet:"magnet:?xt=urn:btih:"+hash("c"),seeders:60,season:1,episode:1,size:5000000000},
-    {name:"Breaking.Bad.S02E01.1080p",infoHash:hash("d"),magnet:"magnet:?xt=urn:btih:"+hash("d"),seeders:60,season:2,episode:1,size:1500000000}
+    {name:"Breaking.Bad.S02E01.1080p",infoHash:hash("d"),magnet:"magnet:?xt=urn:btih:"+hash("d"),seeders:60,season:2,episode:1,size:1500000000},
+    {name:"Breaking.Bad.S01E01E02.720p",infoHash:hash("j"),magnet:"magnet:?xt=urn:btih:"+hash("j"),seeders:80,season:1,episode:1,size:1500000000},
+    {name:"Breaking.Bad.1x01-1x02.720p",infoHash:hash("k"),magnet:"magnet:?xt=urn:btih:"+hash("k"),seeders:80,season:1,episode:1,size:1500000000},
+    {name:"Breaking.Bad.S01E01-S01E02.720p",infoHash:hash("l"),magnet:"magnet:?xt=urn:btih:"+hash("l"),seeders:80,season:1,episode:1,size:1500000000}
   ];
   return {ok:true,status:200,json:async()=>({results:rows})};
 };
@@ -94,6 +97,10 @@ const {getStreams}=require("./torrentio.js");
   assert.ok(r.some(x=>x.infoHash==="b".repeat(40)));
   assert.ok(r.some(x=>x.infoHash==="8".repeat(40)), "EZTV exact episode result must be included");
   assert.ok(!r.some(x=>x.infoHash==="9".repeat(40)), "EZTV other episodes must be excluded");
+  for (const rejected of ["j","k","l"]) {
+    assert.ok(!r.some(x=>x.infoHash===rejected.repeat(40)),
+      "multi-episode release " + rejected + " must not be returned for one episode");
+  }
   assert.match(calls[1],/season=1&episode=1/);
   assert.deepEqual(calls.filter(x=>x.includes("/search/?")).map(x=>Number((x.match(/min_seeders=(\d+)/)||[])[1])),[10,5,1]);
 
