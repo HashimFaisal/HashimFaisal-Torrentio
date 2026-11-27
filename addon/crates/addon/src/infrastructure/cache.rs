@@ -123,7 +123,7 @@ impl Cache {
         tracing::info!(stream_mb = stream_bytes / 1024 / 1024, resolved = RESOLVED_LRU_SIZE, "Cache sizes");
         Self {
             metrics,
-            streams: Moka::<String, Timed<Packed>>::builder()
+            streams: Moka::<String, Timed<StreamEntry>>::builder()
                 .max_capacity(stream_bytes)
                 .weigher(|key, entry| {
                     let weight = key.len() + entry.value.packed.len() + decoded_stream_bytes(&entry.value.decoded);
