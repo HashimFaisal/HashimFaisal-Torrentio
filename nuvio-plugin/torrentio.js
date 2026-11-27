@@ -532,7 +532,7 @@ async function queryEztv(imdbId) {
     });
   });
 }
-async function queryRarbgAdaptive(imdbId, kind, requestedSeason, requestedEpisode, diagnostics, profile) {
+async function queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, profile) {
   var thresholds = [10, 5, 1], collected = [], seen = Object.create(null);
   for (var i = 0; i < thresholds.length; i++) {
     var rows = await queryIndex(imdbId, kind, season, episode, thresholds[i]);
@@ -610,7 +610,7 @@ async function getStreams(tmdbId, mediaType, season, episode) {
     var profile = getNetworkProfile();
     // Independent catalogs run concurrently; provider failures are isolated.
     var jobs = [runProvider("The RarBg", function() {
-      return queryRarbgAdaptive(imdbId, kind, season, episode, diagnostics, profile);
+      return queryRarbgAdaptive(imdbId, kind, requestedSeason, requestedEpisode, diagnostics, profile);
     })];
     if (kind === "movie") {
       jobs.push(runProvider("YTS", async function() {
