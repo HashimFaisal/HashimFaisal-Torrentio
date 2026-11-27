@@ -113,7 +113,7 @@ fn filter_by_seeders(streams: Vec<Stream>, config: &Config) -> Vec<Stream> {
     }
     streams
         .into_iter()
-        .filter(|stream| stream.name.starts_with("[HTTP]") || extract_seeders(&stream.title) >= minimum)
+        .filter(|stream| extract_seeders(&stream.title) >= minimum)
         .collect()
 }
 
@@ -274,12 +274,4 @@ mod tests {
         assert_eq!(sort_streams(streams, &config).len(), 2);
     }
 
-    #[test]
-    fn direct_http_streams_bypass_minimum_seeder_filtering() {
-        let config = Config::parse("minseeders=100");
-        let direct = stream("[HTTP] Example CDN\n1080p", "Movie.2024.1080p.WEB-DL");
-        let result = sort_streams(vec![direct], &config);
-        assert_eq!(result.len(), 1);
-        assert!(result[0].name.starts_with("[HTTP]"));
-    }
 }
