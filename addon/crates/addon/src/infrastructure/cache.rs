@@ -216,19 +216,23 @@ impl Cache {
             let timer = self.metrics.cache_timer("get");
             let stored = timeout(CACHE_READ_TIMEOUT, store.get_packed(&key)).await.ok().and_then(Result::ok).flatten();
             timer.finish();
-            if let Some(packed) = stored
-                && let Ok(streams) = packed.decode::<Vec<Stream>>()
-            {
-                self.metrics.cache_result("stream", "store");
-                let streams = Arc::new(streams);
-                self.remember_streams(key, packed, Arc::clone(&streams), streams.is_empty()).await;
-                return Ok(streams);
+            if let Some(packed) = stored {
+                let decode_packed = packed.clone();
+                let decoded = tokio::task::spawn_blocking(move || decode_packed.decode::<Vec<Stream>>()).await;
+                if let Ok(Ok(streams)) = decoded {
+                    self.metrics.cache_result("stream", "store");
+                    let streams = Arc::new(streams);
+                    self.remember_streams(key, packed, Arc::clone(&streams), streams.is_empty()).await;
+                    return Ok(streams);
+                }
             }
         }
         self.metrics.cache_result("stream", "miss");
         let streams = Arc::new(method().await?);
-        match Packed::encode(streams.as_ref()) {
-            Ok(packed) => {
+        let encode_streams = Arc::clone(&streams);
+        let encoded = tokio::task::spawn_blocking(move || Packed::encode(encode_streams.as_ref())).await;
+        match encoded {
+            Ok(Ok(packed)) => {
                 if let Some(store) = &self.stores.streams {
                     let ttl = if streams.is_empty() { STREAM_EMPTY_TTL } else { STREAM_TTL };
                     let store = store.clone();
@@ -240,7 +244,8 @@ impl Cache {
                 }
                 self.remember_streams(key, packed, Arc::clone(&streams), streams.is_empty()).await;
             }
-            Err(error) => tracing::warn!(key, %error, "Failed to encode streams for the cache"),
+            Ok(Err(error)) => tracing::warn!(key, %error, "Failed to encode streams for the cache"),
+            Err(error) => tracing::warn!(key, %error, "Failed to join stream cache encoder"),
         }
         Ok(streams)
     }
