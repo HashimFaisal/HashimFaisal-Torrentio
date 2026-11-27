@@ -534,7 +534,7 @@ async function queryEztv(imdbId) {
 }
 function retryableLookupError(error) {
   var message = str(error && error.message ? error.message : error);
-  var match = message.match(/HTTP\\s+(\\d{3})/i);
+  var match = message.match(/HTTP\s+(\d{3})/i);
   var status = match ? Number(match[1]) : 0;
   return status === 408 || status === 429 || status === 500 ||
     status === 502 || status === 503 || status === 504 ||
