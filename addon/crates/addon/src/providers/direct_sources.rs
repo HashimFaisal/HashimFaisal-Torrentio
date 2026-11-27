@@ -24,6 +24,7 @@ struct DirectApiResponse {
 pub(crate) struct DirectSources {
     endpoint: Url,
     client: Client,
+    api_key: Option<String>,
 }
 
 impl DirectSources {
@@ -63,16 +64,19 @@ impl DirectSources {
                 return None;
             }
         };
-        Some(Self { endpoint, client })
+        let api_key = env::var("DIRECT_STREAM_API_KEY").ok().map(|value| value.trim().to_owned()).filter(|value| !value.is_empty());
+        Some(Self { endpoint, client, api_key })
     }
 
     pub(crate) async fn resolve(&self, content_type: ContentType, id: &str) -> Result<Vec<Stream>> {
         let mut endpoint = self.endpoint.clone();
         endpoint.query_pairs_mut().append_pair("type", content_type.as_str()).append_pair("id", id);
 
-        let mut response = self
-            .client
-            .get(endpoint)
+        let mut request = self.client.get(endpoint);
+        if let Some(api_key) = &self.api_key {
+            request = request.bearer_auth(api_key);
+        }
+        let mut response = request
             .send()
             .await
             .context("direct source API request failed")?
@@ -206,6 +210,52 @@ mod tests {
     fn labels_direct_streams_for_ordering_and_diagnostics() {
         let result = validate_stream(stream("https://cdn.example/video.mp4"), false).unwrap();
         assert_eq!(result.name, "[HTTP] Example CDN\nDirect");
+    }
+
+    #[tokio::test]
+    async fn requests_the_configured_api_with_identifier_and_optional_bearer_key() {
+        use wiremock::{matchers::{header, method, path, query_param}, Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/streams"))
+            .and(query_param("type", "movie"))
+            .and(query_param("id", "tt1234567"))
+            .and(header("authorization", "Bearer test-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                r#"{"streams":[{"name":"Licensed CDN\\n1080p","title":"Sample feature","url":"https://cdn.example/video.m3u8"}]}"#,
+                "application/json",
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let provider = DirectSources {
+            endpoint: Url::parse(&format!("{}/streams", server.uri())).unwrap(),
+            client: Client::builder().redirect(Policy::none()).build().unwrap(),
+            api_key: Some("test-secret".to_owned()),
+        };
+        let streams = provider.resolve(ContentType::Movie, "tt1234567").await.unwrap();
+        assert_eq!(streams.len(), 1);
+        assert_eq!(streams[0].url.as_deref(), Some("https://cdn.example/video.m3u8"));
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_api_responses() {
+        use wiremock::{matchers::{method, path}, Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/streams"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("x".repeat(MAX_RESPONSE_BYTES + 1)))
+            .mount(&server)
+            .await;
+        let provider = DirectSources {
+            endpoint: Url::parse(&format!("{}/streams", server.uri())).unwrap(),
+            client: Client::builder().redirect(Policy::none()).build().unwrap(),
+            api_key: None,
+        };
+        assert!(provider.resolve(ContentType::Movie, "tt1234567").await.is_err());
     }
 
     #[test]
