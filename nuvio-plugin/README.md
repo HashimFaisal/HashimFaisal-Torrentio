@@ -14,7 +14,7 @@ Add this manifest URL in Nuvio → Settings → Plugins → Add Repository:
 - TMDB ID → IMDb ID resolution.
 - Exact IMDb/season/episode search through The RarBg API.
 - Verifies that the 40-character info hash matches the BTIH hash embedded in each magnet URI; malformed or mismatched pairs are discarded.
-- Rejects fractional/negative/unsafe swarm counters, invalid sizes, duplicate hashes, zero-seeder results, and explicitly failed verification.
+- Rejects fractional/negative/unsafe swarm counters, invalid sizes, duplicate hashes, zero-seeder results, and explicitly failed verification. Unchecked states such as `unknown`, `cant_check`, and `retried` are retained with a lower confidence score; only a definitive `failed` verdict is discarded.
 - Computes metadata confidence from release-title consistency and available source/codec fields; if title and structured resolution disagree, it conservatively reports the lower resolution and flags the conflict.
 - Adaptive swarm search: tries 10 seeders first, then falls back to 5 and 1 only when fewer than five usable results are found.
 - Rejects multi-episode ranges and season packs to avoid starting the wrong file.
