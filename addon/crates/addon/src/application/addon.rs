@@ -257,7 +257,7 @@ fn is_kitsu_id(value: &str) -> bool {
         (parts.next(), parts.next(), parts.next()),
         (Some(id), None, None) if is_digits(id)
     ) || matches!(
-        (rest.split_once(':').map(|(id, episode)| (id, episode)),),
+        (rest.split_once(':'),),
         (Some((id, episode)),) if is_digits(id) && is_digits(episode) && !episode.contains(':')
     )
 }
