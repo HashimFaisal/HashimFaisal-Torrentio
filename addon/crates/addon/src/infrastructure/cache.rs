@@ -84,7 +84,7 @@ fn decoded_stream_bytes(streams: &[Stream], capacity: usize) -> usize {
                                 .extra
                                 .iter()
                                 .map(|(key, value)| {
-                                    size_of::<(String, Value)>() + key.capacity() + json_heap_bytes(value)
+                                    size_of::<(String, Value)>() + 64 + key.capacity() + json_heap_bytes(value)
                                 })
                                 .sum::<usize>()
                     })
@@ -444,7 +444,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn memory_cache_gauges_report_entries_and_compressed_bytes() {
+    async fn memory_cache_gauges_report_entries_and_weighted_bytes() {
         let cache = cache();
         let streams: Vec<Stream> = (0..50).map(stream).collect();
         let packed = Packed::encode(&streams).unwrap();
